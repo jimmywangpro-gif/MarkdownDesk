@@ -1,0 +1,74 @@
+name: Cross-platform packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: ${{ matrix.platform }} packages
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: macos
+          - os: windows-2022
+            platform: windows
+          - os: ubuntu-22.04
+            platform: linux
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Build native packages and manifest
+        run: npm run package
+
+      - name: Validate generated manifest and size guard
+        run: npm run packaging:validate -- --manifest src-tauri/target/packaging/${{ matrix.platform }}/manifest.json
+
+      - name: Upload generated packages and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: markdowndesk-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/packaging/${{ matrix.platform }}/manifest.json

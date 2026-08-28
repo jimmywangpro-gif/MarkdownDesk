@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { renderMarkdownBlocks } from "./lib/renderMarkdown";
 import { useSettings } from "./lib/SettingsContext";
 import {
@@ -15,6 +15,10 @@ import {
   type RecentFile,
   type UnlistenFn,
 } from "./lib/fileOps";
+import { saveHtmlFile } from "./lib/exportHtml";
+import { printPdf } from "./lib/printPdf";
+import { createDropHandler } from "./dnd";
+import { createPreviewLinkHandler } from "./previewLinks";
 import { useSyncScroll } from "./lib/useSyncScroll";
 import "./App.css";
 
@@ -61,6 +65,7 @@ function App() {
   const [fileMtime, setFileMtime] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
+  const [operationStatus, setOperationStatus] = useState<string | null>(null);
   const filePathRef = useRef<string | null>(null);
   const fileMtimeRef = useRef<number | null>(null);
 
@@ -106,6 +111,17 @@ function App() {
     refreshRecent();
   }, [dirty, applyFile, refreshRecent]);
 
+  const handleOpenPath = useCallback(
+    async (path: string) => {
+      const file = await readFile(path);
+      applyFile(file);
+      await recentFilesAdd(file.path);
+      await watchFile(file.path);
+      refreshRecent();
+    },
+    [applyFile, refreshRecent],
+  );
+
   const handleSaveAs = useCallback(async () => {
     const saved = await saveFileAs(source);
     if (!saved) return;
@@ -144,6 +160,27 @@ function App() {
     await recentFilesClear();
     setRecentFiles([]);
   }, []);
+
+  const handleExportHtml = useCallback(async () => {
+    const result = await saveHtmlFile(source, filePath ?? undefined);
+    if (result.status === "saved") {
+      setOperationStatus(`HTML 已匯出：${result.path}`);
+    } else if (result.status === "error") {
+      setOperationStatus(`HTML 匯出失敗：${result.error}`);
+    } else {
+      setOperationStatus(null);
+    }
+  }, [filePath, source]);
+
+  const handlePrintPdf = useCallback(async () => {
+    try {
+      await printPdf({ mode, setMode });
+    } catch (error) {
+      setOperationStatus(
+        `列印失敗：${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }, [mode]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -237,9 +274,33 @@ function App() {
 
   const showEditor = mode === "edit" || mode === "split";
   const showPreview = mode === "view" || mode === "split";
+  const dropHandler = useMemo(
+    () =>
+      createDropHandler({
+        isDirty: () => dirty,
+        confirmDiscard: () =>
+          window.confirm("目前有未儲存的變更，確定要開啟拖放的檔案嗎？"),
+        onOpen: handleOpenPath,
+      }),
+    [dirty, handleOpenPath],
+  );
+  const previewLinkHandler = useMemo(() => createPreviewLinkHandler(), []);
+  const handleDrop = useCallback(
+    (event: DragEvent<HTMLElement>) => {
+      void dropHandler(event.nativeEvent).then((result) => {
+        if (result.kind !== "opened") setOperationStatus(result.message);
+      });
+    },
+    [dropHandler],
+  );
 
   return (
-    <main className="app">
+    <main
+      className="app"
+      data-testid="app-root"
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={handleDrop}
+    >
       <header className="toolbar" data-testid="toolbar">
         <button
           type="button"
@@ -261,6 +322,20 @@ function App() {
           data-testid="save-as-button"
         >
           另存
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleExportHtml()}
+          data-testid="export-html-button"
+        >
+          匯出 HTML
+        </button>
+        <button
+          type="button"
+          onClick={() => void handlePrintPdf()}
+          data-testid="print-pdf-button"
+        >
+          列印 PDF
         </button>
         <select
           aria-label="最近檔案"
@@ -289,6 +364,11 @@ function App() {
           {filePath ? filePath : "未命名"}
           {dirty ? " •" : ""}
         </span>
+        {operationStatus && (
+          <span className="file-status" data-testid="operation-status" role="status">
+            {operationStatus}
+          </span>
+        )}
         <div className="toolbar-group">
           <span className="toolbar-label">Mode</span>
           {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
@@ -384,6 +464,7 @@ function App() {
           <section className="pane preview-pane" data-testid="preview-pane" ref={previewRef}>
             <div
               className="preview-content"
+              onClick={(event) => void previewLinkHandler(event.nativeEvent)}
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </section>
