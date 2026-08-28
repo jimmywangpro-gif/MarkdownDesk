@@ -34,7 +34,7 @@
 
 ## T09 packaging evidence boundary
 
-- `docs/exec/t09.md` 記錄 T09 在獨立 worktree 的實際 macOS package run：Darwin arm64 DMG 3,778,078 bytes（3.603 MiB），package-file guard `VERIFIED`。
+- `docs/exec/t09.md` 記錄 T09 在獨立 worktree 的實際 macOS package run：Darwin arm64 DMG 首次為 3,778,078 bytes；main 最後一次重跑為 3,778,010 bytes，兩者 package-file guard 均 `VERIFIED`。
 - `docs/packaging.md`、`.github/workflows/package.yml`、packaging scripts 與 commit `ae2874e` 證明 target mapping、manifest validation 與 CI workflow 設定；workflow 本身尚未在本次執行。
 - Windows NSIS、Linux deb/AppImage、installed footprint、安裝/啟動、簽章與 notarization 結果仍為 **UNVERIFIED**。
 
