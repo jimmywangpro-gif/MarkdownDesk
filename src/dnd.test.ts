@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDropHandler, handleDrop } from "./dnd";
+import { createDropHandler, handleDrop, handleDropPaths } from "./dnd";
 
 function dataTransferWith(file?: { name: string; path?: string }): DataTransfer {
   return {
@@ -15,6 +15,21 @@ describe("drag-and-drop file seam", () => {
       name: "notes.md",
       path: "/tmp/notes.md",
     }), {
+      isDirty: false,
+      onOpen,
+    });
+
+    expect(result).toMatchObject({
+      kind: "opened",
+      path: "/tmp/notes.md",
+    });
+    expect(onOpen).toHaveBeenCalledWith("/tmp/notes.md");
+  });
+
+  it("opens paths delivered by the Tauri native drop event", async () => {
+    const onOpen = vi.fn();
+
+    const result = await handleDropPaths(["/tmp/notes.md"], {
       isDirty: false,
       onOpen,
     });

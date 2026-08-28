@@ -17,6 +17,23 @@ vi.mock("@tauri-apps/api/event", () => ({
   listen: eventMocks.listen,
 }));
 
+const webviewMocks = vi.hoisted(() => ({
+  onDragDropEvent: vi.fn(),
+  dropHandler: undefined as
+    | ((event: {
+        payload:
+          | { type: "drop"; paths: string[] }
+          | { type: "over" }
+          | { type: "enter"; paths: string[] }
+          | { type: "leave" };
+      }) => void)
+    | undefined,
+}));
+
+vi.mock("@tauri-apps/api/webview", () => ({
+  getCurrentWebview: () => ({ onDragDropEvent: webviewMocks.onDragDropEvent }),
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
@@ -48,6 +65,14 @@ describe("App integration seams (T09)", () => {
         handler: (event: { payload: string }) => void,
       ) => {
         if (event === "open-file") eventMocks.openFileHandler = handler;
+        return vi.fn();
+      },
+    );
+    webviewMocks.onDragDropEvent.mockReset();
+    webviewMocks.dropHandler = undefined;
+    webviewMocks.onDragDropEvent.mockImplementation(
+      async (handler: NonNullable<typeof webviewMocks.dropHandler>) => {
+        webviewMocks.dropHandler = handler;
         return vi.fn();
       },
     );
@@ -100,6 +125,29 @@ describe("App integration seams (T09)", () => {
       expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe("# Dropped");
     });
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/dropped.md" });
+  });
+
+  it("opens a Markdown path delivered by Tauri native drag and drop", async () => {
+    render(<App />);
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "recent_files_list") return [];
+      if (command === "read_file") {
+        return { path: "/tmp/native-drop.md", content: "# Native drop", mtime: 4 };
+      }
+      return undefined;
+    });
+
+    await waitFor(() => expect(webviewMocks.dropHandler).toBeTypeOf("function"));
+    webviewMocks.dropHandler?.({
+      payload: { type: "drop", paths: ["/tmp/native-drop.md"] },
+    });
+
+    await waitFor(() => {
+      expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe(
+        "# Native drop",
+      );
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/native-drop.md" });
   });
 
   it("opens a Markdown file delivered by the native file association event", async () => {

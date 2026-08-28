@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 
 mod commands;
@@ -63,6 +64,18 @@ fn opened_file_paths(urls: Vec<tauri::Url>) -> Vec<String> {
         .collect()
 }
 
+#[derive(Default)]
+struct PendingOpenFiles(Mutex<Vec<String>>);
+
+fn take_pending_opened_files(pending: &PendingOpenFiles) -> Vec<String> {
+    std::mem::take(&mut *pending.0.lock().unwrap())
+}
+
+#[tauri::command]
+fn take_opened_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<String> {
+    take_pending_opened_files(&state)
+}
+
 #[tauri::command]
 fn load_settings(app: tauri::AppHandle) -> Result<Option<Settings>, String> {
     let path = settings_path(&app)?;
@@ -78,6 +91,15 @@ fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_opened_files_are_taken_once() {
+        let pending = PendingOpenFiles::default();
+        pending.0.lock().unwrap().push("/tmp/launch.md".to_string());
+
+        assert_eq!(take_pending_opened_files(&pending), vec!["/tmp/launch.md"]);
+        assert!(take_pending_opened_files(&pending).is_empty());
+    }
 
     #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
     #[test]
@@ -145,10 +167,12 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .manage(PendingOpenFiles::default())
         .invoke_handler(tauri::generate_handler![
             greet,
             load_settings,
             save_settings,
+            take_opened_files,
             commands::open_file,
             commands::read_file,
             commands::save_file,
@@ -168,6 +192,9 @@ pub fn run() {
         #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
         if let tauri::RunEvent::Opened { urls } = event {
             for path in opened_file_paths(urls) {
+                if let Some(pending) = app_handle.try_state::<PendingOpenFiles>() {
+                    pending.0.lock().unwrap().push(path.clone());
+                }
                 let _ = app_handle.emit("open-file", path);
             }
         }

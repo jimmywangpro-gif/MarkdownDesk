@@ -58,11 +58,34 @@ export function unwatchFile(path: string): Promise<void> {
 export async function onFileOpened(
   handler: (path: string) => void,
 ): Promise<UnlistenFn> {
+  const deliveredDuringRegistration = new Set<string>();
+  let registrationPhase = true;
+  let unlisten: UnlistenFn | undefined;
+
   try {
-    return await listen<string>("open-file", (event) => {
+    unlisten = await listen<string>("open-file", (event) => {
+      if (registrationPhase) deliveredDuringRegistration.add(event.payload);
       handler(event.payload);
     });
+
+    let pendingPaths: string[] = [];
+    try {
+      const queued = await invoke<unknown>("take_opened_files");
+      if (Array.isArray(queued)) {
+        pendingPaths = queued.filter((path): path is string => typeof path === "string");
+      }
+    } catch {
+      // Browser-only mode and older bundles do not provide the native queue.
+    }
+
+    for (const path of pendingPaths) {
+      if (!deliveredDuringRegistration.has(path)) handler(path);
+    }
+    registrationPhase = false;
+    return unlisten;
   } catch {
+    registrationPhase = false;
+    unlisten?.();
     return () => {};
   }
 }

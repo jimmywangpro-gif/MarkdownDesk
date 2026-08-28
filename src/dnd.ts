@@ -27,6 +27,47 @@ function getDataTransfer(source: DragEvent | DataTransfer): DataTransfer | null 
   return "dataTransfer" in source ? source.dataTransfer : source;
 }
 
+async function openMarkdownPath(path: string, options: DropOptions): Promise<DropResult> {
+  if (!isMarkdownName(path)) {
+    return {
+      kind: "ignored",
+      reason: "unsupported-file",
+      message: "已忽略：只支援 .md 檔案。",
+    };
+  }
+
+  const dirty = typeof options.isDirty === "function" ? options.isDirty() : options.isDirty;
+  if (dirty && !(await options.confirmDiscard?.())) {
+    return {
+      kind: "blocked",
+      reason: "dirty",
+      message: "已取消：目前有未儲存的變更。",
+    };
+  }
+
+  await options.onOpen(path);
+  return {
+    kind: "opened",
+    path,
+    message: `準備開啟：${path}`,
+  };
+}
+
+export async function handleDropPaths(
+  paths: readonly string[],
+  options: DropOptions,
+): Promise<DropResult> {
+  const path = paths[0];
+  if (!path) {
+    return {
+      kind: "ignored",
+      reason: "no-file",
+      message: "已忽略：拖放內容沒有檔案。",
+    };
+  }
+  return openMarkdownPath(path, options);
+}
+
 export async function handleDrop(
   source: DragEvent | DataTransfer,
   options: DropOptions,
@@ -59,21 +100,7 @@ export async function handleDrop(
     };
   }
 
-  const dirty = typeof options.isDirty === "function" ? options.isDirty() : options.isDirty;
-  if (dirty && !(await options.confirmDiscard?.())) {
-    return {
-      kind: "blocked",
-      reason: "dirty",
-      message: "已取消：目前有未儲存的變更。",
-    };
-  }
-
-  await options.onOpen(path);
-  return {
-    kind: "opened",
-    path,
-    message: `準備開啟：${path}`,
-  };
+  return openMarkdownPath(path, options);
 }
 
 export function createDropHandler(

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { renderMarkdownBlocks } from "./lib/renderMarkdown";
 import { useSettings } from "./lib/SettingsContext";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   onFileChanged,
   onFileOpened,
@@ -18,7 +19,7 @@ import {
 } from "./lib/fileOps";
 import { saveHtmlFile } from "./lib/exportHtml";
 import { printPdf } from "./lib/printPdf";
-import { createDropHandler } from "./dnd";
+import { createDropHandler, handleDropPaths } from "./dnd";
 import { createPreviewLinkHandler } from "./previewLinks";
 import { useSyncScroll } from "./lib/useSyncScroll";
 import { useSplitRatio } from "./lib/useSplitRatio";
@@ -269,6 +270,34 @@ function App() {
       unlisten?.();
     };
   }, [handleOpenAssociatedPath]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    try {
+      unlisten = undefined;
+      void getCurrentWebview()
+        .onDragDropEvent((event) => {
+          if (event.payload.type !== "drop") return;
+          void handleDropPaths(event.payload.paths, {
+            isDirty: () => dirty,
+            confirmDiscard: () =>
+              window.confirm("目前有未儲存的變更，確定要開啟拖放的檔案嗎？"),
+            onOpen: handleOpenPath,
+          }).then((result) => {
+            if (result.kind !== "opened") setOperationStatus(result.message);
+          });
+        })
+        .then((fn) => {
+          unlisten = fn;
+        })
+        .catch(() => {});
+    } catch {
+      // Browser-only tests and the Vite preview do not expose Tauri webviews.
+    }
+    return () => {
+      unlisten?.();
+    };
+  }, [dirty, handleOpenPath]);
 
   useEffect(() => {
     return () => {
