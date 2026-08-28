@@ -73,10 +73,7 @@ mod tests {
 
     #[test]
     fn greet_contains_name() {
-        assert_eq!(
-            greet("老大"),
-            "Hello, 老大! You've been greeted from Rust!"
-        );
+        assert_eq!(greet("老大"), "Hello, 老大! You've been greeted from Rust!");
     }
 }
 
@@ -160,10 +157,7 @@ async fn export_html_save_dialog(
     app: tauri::AppHandle,
     suggested_file_name: Option<String>,
 ) -> Result<Option<String>, String> {
-    let mut dialog = app
-        .dialog()
-        .file()
-        .add_filter("HTML", &["html", "htm"]);
+    let mut dialog = app.dialog().file().add_filter("HTML", &["html", "htm"]);
     if let Some(file_name) = suggested_file_name {
         dialog = dialog.set_file_name(file_name);
     }
@@ -172,9 +166,7 @@ async fn export_html_save_dialog(
         return Ok(None);
     };
     match picked {
-        tauri_plugin_dialog::FilePath::Path(path) => {
-            Ok(Some(path.to_string_lossy().to_string()))
-        }
+        tauri_plugin_dialog::FilePath::Path(path) => Ok(Some(path.to_string_lossy().to_string())),
         tauri_plugin_dialog::FilePath::Url(_) => Err("不支援的檔案位置".into()),
     }
 }
@@ -193,10 +185,8 @@ mod export_html_tests {
     use super::*;
 
     fn temp_export_dir() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "markdowndesk-t05-export-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("markdowndesk-t05-export-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
