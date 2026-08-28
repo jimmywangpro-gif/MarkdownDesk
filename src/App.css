@@ -93,3 +93,103 @@ body,
     background-color: rgba(255, 255, 255, 0.12);
   }
 }
+
+/* T02: highlight.js token colors for fenced code blocks (append-only). */
+.preview-content pre {
+  background-color: rgba(0, 0, 0, 0.06);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+}
+
+.preview-content pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.preview-content .hljs-keyword,
+.preview-content .hljs-selector-tag,
+.preview-content .hljs-literal,
+.preview-content .hljs-section,
+.preview-content .hljs-link {
+  color: #d73a49;
+}
+
+.preview-content .hljs-string,
+.preview-content .hljs-title,
+.preview-content .hljs-name,
+.preview-content .hljs-type,
+.preview-content .hljs-attribute,
+.preview-content .hljs-symbol,
+.preview-content .hljs-bullet,
+.preview-content .hljs-addition,
+.preview-content .hljs-variable,
+.preview-content .hljs-template-tag,
+.preview-content .hljs-template-variable {
+  color: #032f62;
+}
+
+.preview-content .hljs-comment,
+.preview-content .hljs-quote,
+.preview-content .hljs-deletion,
+.preview-content .hljs-meta {
+  color: #6a737d;
+}
+
+.preview-content .hljs-number,
+.preview-content .hljs-regexp,
+.preview-content .hljs-built_in,
+.preview-content .hljs-builtin-name {
+  color: #005cc5;
+}
+
+.preview-content .hljs-emphasis {
+  font-style: italic;
+}
+
+.preview-content .hljs-strong {
+  font-weight: 700;
+}
+
+@media (prefers-color-scheme: dark) {
+  .preview-content pre {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .preview-content .hljs-keyword,
+  .preview-content .hljs-selector-tag,
+  .preview-content .hljs-literal,
+  .preview-content .hljs-section,
+  .preview-content .hljs-link {
+    color: #ff7b72;
+  }
+
+  .preview-content .hljs-string,
+  .preview-content .hljs-title,
+  .preview-content .hljs-name,
+  .preview-content .hljs-type,
+  .preview-content .hljs-attribute,
+  .preview-content .hljs-symbol,
+  .preview-content .hljs-bullet,
+  .preview-content .hljs-addition,
+  .preview-content .hljs-variable,
+  .preview-content .hljs-template-tag,
+  .preview-content .hljs-template-variable {
+    color: #a5d6ff;
+  }
+
+  .preview-content .hljs-comment,
+  .preview-content .hljs-quote,
+  .preview-content .hljs-deletion,
+  .preview-content .hljs-meta {
+    color: #8b949e;
+  }
+
+  .preview-content .hljs-number,
+  .preview-content .hljs-regexp,
+  .preview-content .hljs-built_in,
+  .preview-content .hljs-builtin-name {
+    color: #79c0ff;
+  }
+}

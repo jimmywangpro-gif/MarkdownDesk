@@ -30,3 +30,134 @@ describe("renderMarkdown (T01 minimal pipeline)", () => {
     expect(html).not.toContain("onerror=");
   });
 });
+
+// T02 GFM golden tests（unified 管線完整輸出鎖定）。
+describe("renderMarkdown (T02 GFM golden)", () => {
+  it("renders ATX headings h1-h6", () => {
+    expect(renderMarkdown("# H1\n\n### H3\n\n###### H6")).toBe(
+      "<h1>H1</h1>\n<h3>H3</h3>\n<h6>H6</h6>"
+    );
+  });
+
+  it("renders nested unordered and ordered lists", () => {
+    expect(
+      renderMarkdown(
+        "- item 1\n  - sub a\n    - sub sub i\n  - sub b\n- item 2\n\n1. first\n2. second"
+      )
+    ).toBe(
+      `<ul>
+<li>item 1
+<ul>
+<li>sub a
+<ul>
+<li>sub sub i</li>
+</ul>
+</li>
+<li>sub b</li>
+</ul>
+</li>
+<li>item 2</li>
+</ul>
+<ol>
+<li>first</li>
+<li>second</li>
+</ol>`
+    );
+  });
+
+  it("renders GFM tables with alignment", () => {
+    expect(renderMarkdown("| a | b | c |\n| :- | -: | :-: |\n| 1 | 2 | 3 |")).toBe(
+      `<table>
+<thead>
+<tr>
+<th align="left">a</th>
+<th align="right">b</th>
+<th align="center">c</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">1</td>
+<td align="right">2</td>
+<td align="center">3</td>
+</tr>
+</tbody>
+</table>`
+    );
+  });
+
+  it("renders GFM task lists with checkbox state", () => {
+    expect(renderMarkdown("- [x] done\n- [ ] todo")).toBe(
+      `<ul class="contains-task-list">
+<li class="task-list-item"><input type="checkbox" checked disabled> done</li>
+<li class="task-list-item"><input type="checkbox" disabled> todo</li>
+</ul>`
+    );
+  });
+
+  it("renders GFM strikethrough", () => {
+    expect(renderMarkdown("~~gone~~ and ~~more~~")).toBe(
+      "<p><del>gone</del> and <del>more</del></p>"
+    );
+  });
+
+  it("renders GFM autolinks (URL and email)", () => {
+    expect(renderMarkdown("<https://example.com> and <user@example.com>")).toBe(
+      '<p><a href="https://example.com">https://example.com</a> and <a href="mailto:user@example.com">user@example.com</a></p>'
+    );
+  });
+
+  it("renders blockquotes", () => {
+    expect(renderMarkdown("> quote line 1\n> quote line 2")).toBe(
+      `<blockquote>
+<p>quote line 1
+quote line 2</p>
+</blockquote>`
+    );
+  });
+
+  it("highlights fenced code blocks with hljs classes", () => {
+    expect(
+      renderMarkdown("```js\nconst x = 1;\nif (x) { console.log(x); }\n```")
+    ).toBe(
+      `<pre><code class="hljs language-js"><span class="hljs-keyword">const</span> x = <span class="hljs-number">1</span>;
+<span class="hljs-keyword">if</span> (x) { <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(x); }
+</code></pre>`
+    );
+  });
+
+  it("leaves unlabeled code blocks unhighlighted", () => {
+    expect(renderMarkdown("```\nno language\n```")).toBe(
+      "<pre><code>no language\n</code></pre>"
+    );
+  });
+
+  it("renders inline emphasis and code", () => {
+    expect(renderMarkdown("this is **bold** and *italic* and `code`")).toBe(
+      "<p>this is <strong>bold</strong> and <em>italic</em> and <code>code</code></p>"
+    );
+  });
+});
+
+// T02 sanitize golden tests（rehype-sanitize 剝除案例）。
+describe("renderMarkdown (T02 sanitize)", () => {
+  it("strips raw script tags entirely", () => {
+    expect(renderMarkdown("<script>alert(1)</script>")).toBe("");
+  });
+
+  it("strips raw HTML with event handlers entirely", () => {
+    expect(renderMarkdown('<img src="x" onerror="alert(1)">')).toBe("");
+  });
+
+  it("strips javascript: URIs from links", () => {
+    expect(renderMarkdown("[click](javascript:alert(1))")).toBe(
+      "<p><a>click</a></p>"
+    );
+  });
+
+  it("keeps safe https links", () => {
+    expect(renderMarkdown("[ok](https://example.com)")).toBe(
+      '<p><a href="https://example.com">ok</a></p>'
+    );
+  });
+});
