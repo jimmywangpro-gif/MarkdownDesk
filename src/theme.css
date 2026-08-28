@@ -1,0 +1,22 @@
+/* T07: theme tokens — light/dark via [data-theme] on <html>.
+   Editor and preview share the same token set. */
+:root,
+[data-theme="light"] {
+  --bg: #f6f6f6;
+  --fg: #0f0f0f;
+  --accent: #2563eb;
+  --border: #d0d0d0;
+  --card: #ffffff;
+  --code-bg: rgba(0, 0, 0, 0.06);
+  --muted: #6b7280;
+}
+
+[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --fg: #f6f6f6;
+  --accent: #60a5fa;
+  --border: #444444;
+  --card: #2f2f2f;
+  --code-bg: rgba(255, 255, 255, 0.12);
+  --muted: #9ca3af;
+}
