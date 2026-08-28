@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    mds_scaffold_lib::run()
+    markdowndesk_lib::run()
 }

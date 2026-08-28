@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "mds-scaffold",
+  "productName": "MarkdownDesk",
   "version": "0.1.0",
   "identifier": "com.markdowndesk.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "mds-scaffold",
+        "title": "MarkdownDesk",
         "width": 800,
         "height": 600
       }

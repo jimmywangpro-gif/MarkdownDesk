@@ -1,0 +1,44 @@
+You are the implementation engineer for this task. Follow these rules:
+
+[Scope boundary]
+Work in /Users/gabriel.du/projects/MarkdownDesk (main branch). Implement/modify ONLY these files:
+- src/lib/renderMarkdown.ts (create)
+- src/App.tsx (rewrite)
+- src/App.css (adjust as needed)
+- src/main.tsx and index.html: leave as-is unless an import fix is strictly required.
+Do NOT modify anything outside this scope: no test files (src/lib/renderMarkdown.test.ts, src/App.test.tsx are the spec — read them, do not edit them), no package.json, no src-tauri/**.
+
+[Pre-work — read-first]
+Read these first to understand the exact contract:
+- src/lib/renderMarkdown.test.ts (golden tests your implementation must satisfy)
+- src/App.test.tsx (component contract: data-testid="editor-pane", "preview-pane", "editor-input")
+- src/App.tsx (current scaffold state)
+
+[Task]
+1. Create src/lib/renderMarkdown.ts exporting `renderMarkdown(source: string): string`:
+   - Pure function, no side effects.
+   - Minimal Markdown: ATX headings (# .. ######), paragraphs, **bold** / *italic*, inline `code`, line breaks.
+   - SECURITY BASELINE: raw HTML must be escaped (no <script> passthrough, no event handler attributes like onerror=, no javascript: links). Escape by HTML entity encoding of < > & " in raw HTML fragments.
+   - Implementation: TypeScript module with clear structure (block-level parse loop + inline-level transforms). No external npm dependency in this ticket.
+2. Rewrite src/App.tsx:
+   - Two-pane layout: editor pane (textarea, data-testid="editor-input") and preview pane (div, data-testid="preview-pane") with data-testid="editor-pane" / "preview-pane" wrappers.
+   - Live rendering: preview always shows renderMarkdown(current source) as dangerouslySetInnerHTML.
+   - Keep the existing greet invoke example OUT of the UI (App shows no greet button); you may delete the invoke usage in App.tsx.
+   - Reasonable initial content: "# MarkdownDesk\n\nStart typing…" so the app shows something on first launch.
+3. Adjust src/App.css for a clean horizontal split layout (editor left, preview right), monospace editor font, readable preview typography. Keep it minimal.
+
+[Acceptance criteria — must be verifiable]
+- All 6 tests in src/lib/renderMarkdown.test.ts pass.
+- All 3 tests in src/App.test.tsx pass (panes exist; # Hello → h1 Hello; live paragraph update).
+- npm run build (tsc + vite build) succeeds with zero TS errors.
+- renderMarkdown has no console side effects and is deterministic.
+
+[Test commands — run these yourself before delivery]
+cd /Users/gabriel.du/projects/MarkdownDesk && npm test
+cd /Users/gabriel.du/projects/MarkdownDesk && npm run build
+
+[SELF-TEST gate — mandatory]
+Run BOTH commands above. Confirm all tests GREEN and build passes. Only then declare delivery. If you cannot run them, state exactly why and mark the delivery UNVERIFIED — never claim a pass you did not run.
+
+[Commit]
+git add -A && git commit -m "feat(t01): minimal renderMarkdown pipeline + two-pane live preview (tracer bullet)"
