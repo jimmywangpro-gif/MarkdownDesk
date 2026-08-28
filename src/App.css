@@ -192,4 +192,82 @@ body,
   .preview-content .hljs-builtin-name {
     color: #79c0ff;
   }
+/* ===== T07: theme tokens + settings controls (appended; existing rules kept) ===== */
+
+:root {
+  color: var(--fg);
+  background-color: var(--bg);
+}
+
+.editor-pane {
+  border-right-color: var(--border);
+}
+
+.editor-input {
+  font-size: var(--editor-font-size, 14px);
+}
+
+.preview-content {
+  font-size: var(--preview-font-size, 16px);
+}
+
+.preview-content code {
+  background-color: var(--code-bg);
+}
+
+.app {
+  flex-direction: column;
+}
+
+.pane {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex: 0 0 auto;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--fg);
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.toolbar-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.toolbar-value {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar-button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-size: 13px;
+  line-height: 1;
+  padding: 0.3rem 0.55rem;
+  cursor: pointer;
+}
+
+.toolbar-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
