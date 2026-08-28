@@ -15,3 +15,9 @@
 - 2026-08-28：並行分支同時 append 同檔（App.css/App.tsx/lib.rs）必生衝突；prompt 已聲明 append-only 可降低但不能消除，合併順序 + Hermes 手工融合是必要工序。（影響：所有 W2+ 併行合併）
 - 2026-08-28：模型切換後，Codex/pi 必須在啟動命令同時明確指定 `gpt-5.6-luna` 與 `xhigh`；歷史 EOR 保留原實際模型，不能回填改寫。（影響：跨 session 派工可追溯性）
 - 2026-08-28：T03 舊分支未含 T04，整合分屏功能前必須先合併最新 main；否則 App.tsx 會遺失檔案流程。共享 App.tsx 已改由後續整合票指定唯一 owner。（影響：T03+後續 feature waves）
+
+## T10 文件/回歸
+
+- 2026-08-28：新 worktree 可能沒有 `node_modules`；直接執行 `npm test` 會得到 `vitest: command not found`（exit 127）。先依 lockfile 執行 `npm ci`，再重跑測試；不要把環境失敗當成產品測試結果。（影響：回歸驗證）
+- 2026-08-28：Tauri packaging 目前已有 macOS Darwin arm64 的實際 DMG package-file 證據（詳見 `docs/exec/t09.md`）；Windows/Linux runner、安裝/啟動與 installed footprint 仍必須在目標環境補證。
+- 2026-08-28：SPEC 的 user story 若只有 schema 或 native command seam，不能推論成完整 GUI/平台驗收；acceptance matrix 必須把缺少的 dialog、install、launch 與 target-runner 結果標成 `PARTIAL` 或 `UNVERIFIED`。（影響：最終驗收文件）
