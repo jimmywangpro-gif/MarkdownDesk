@@ -26,7 +26,7 @@
 | 15 | light/dark themes | **PASS** | `src/App.settings.test.tsx`：`toggles theme instantly and persists`、`loads saved settings on startup`；`src/theme.css`；`docs/exec/t07.md`。 | 測試驗證 token/state；不同 OS 的實際顯示未單獨 smoke。 |
 | 16 | 調整 editor/preview font size | **PASS** | `src/App.settings.test.tsx`：editor 與 preview 的 live update/persist tests；`docs/exec/t07.md`。 | 未做三平台視覺 smoke。 |
 | 17 | settings 跨 launch 持久化 | **PARTIAL** | `src/lib/settings.test.ts` 的 default/merge/save/fallback tests；`src-tauri/src/lib.rs` 的 `settings_json_round_trip_in_temp_dir`、missing-file test；`src/App.settings.test.tsx`；`docs/exec/t07.md`。 | 測試是 Rust temp-dir 與 mocked invoke；沒有實際關閉再啟動 packaged app 的證據。 |
-| 18 | Windows、Linux、macOS 的同一體驗與 single installed binary | **UNVERIFIED** | `src-tauri/tauri.conf.json` 明列 `dmg`、`nsis`、`deb`、`appimage`；`docs/packaging.md`、`.github/workflows/package.yml`、`docs/exec/t09.md` 提供 target mapping、workflow 與 macOS package-file evidence。 | 沒有 Windows/Linux runner 結果，也沒有 macOS 安裝後 smoke；不能宣稱三平台或 single-binary release 已驗證。 |
+| 18 | Windows、Linux、macOS 的同一體驗與 single installed binary | **PARTIAL** | GitHub Actions runner 實測（run 33178692130）：macOS dmg 3.78MB ✓、Linux deb 4.46MB ✓、AppImage 81.9MB（per-format 100MiB 預算內）；workflow `package.yml` 三平台矩陣。 | AppImage 81.9MB 遠大於其他格式（格式本質）；NSIS 於修正後 runner 待確認；安裝/啟動 smoke 與簽章未驗證。 |
 | 19 | 將 `.md` 拖到視窗開啟 | **PASS** | `src/dnd.test.ts` 的 Markdown path、unsupported file、dirty guard、prevent-default tests；`src/App.integration.test.tsx`：`opens a dropped Markdown file through the existing file seam`；`docs/exec/t08.md`、T09 integration test。 | 測試使用 mock/file path；實際拖入 Tauri webview 未在平台上執行。 |
 | 20 | preview external links 開系統瀏覽器 | **PARTIAL** | `src/previewLinks.test.ts` 的 http/mailto opener 與 internal anchor tests；`src/App.integration.test.tsx`：`routes preview external links to the system opener`；`src-tauri/tauri.conf.json`/capability 限制；`docs/exec/t08.md`。 | opener seam 已測試，但實際系統瀏覽器啟動與三平台 URL policy 未 smoke。 |
 | 21 | preview sanitize 防 script injection | **PASS** | `src/lib/renderMarkdown.test.ts` sanitize golden（script、event handler、javascript URI）；`src/lib/exportHtml.test.ts`；`src-tauri/tauri.conf.test.ts` CSP invariant；`docs/exec/t08.md`。 | 測試與 CSP invariant 通過；未把它延伸成未執行的 packaged runtime 安全審查。 |
@@ -35,6 +35,8 @@
 ## T09 packaging evidence boundary
 
 - `docs/exec/t09.md` 記錄 T09 在獨立 worktree 的實際 macOS package run：Darwin arm64 DMG 首次為 3,778,078 bytes；main 最後一次重跑為 3,778,010 bytes，兩者 package-file guard 均 `VERIFIED`。
+- **AppImage 尺寸預算（2026-08-28 使用者核准）**：GitHub runner（ubuntu-22.04）實測 AppImage 為 81,885,688 bytes —— 格式內嵌 linuxdeploy runtime 與 webkit2gtk 依賴，15 MiB 對此格式不可達。size guard 改為 per-format：`appimage ≤ 100 MiB`，`dmg`/`nsis`/`deb` 維持 `≤ 15 MiB`。同次 runner 實測 deb 為 4,455,518 bytes（✓）。
+- **Windows runner**：NSIS 首跑因 Node 20.12+（CVE-2024-27980）`spawnSync npm.cmd EINVAL` 失敗；已改 `shell:true` 修正（commit `c8b03df`）。
 - `docs/packaging.md`、`.github/workflows/package.yml`、packaging scripts 與 commit `ae2874e` 證明 target mapping、manifest validation 與 CI workflow 設定；workflow 本身尚未在本次執行。
 - Windows NSIS、Linux deb/AppImage、installed footprint、安裝/啟動、簽章與 notarization 結果仍為 **UNVERIFIED**。
 
