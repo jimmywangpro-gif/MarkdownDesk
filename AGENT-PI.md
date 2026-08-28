@@ -26,13 +26,13 @@
 ## 3. 啟動命令（Hermes 填入任務）
 
 ```
-pi -p --provider ollama --model deepseek-v4-flash:0731-cloud --thinking max \
+pi -p --provider openai-codex --model gpt-5.6-luna --thinking xhigh \
    --session-dir <worktree>/.pi-sessions \
    --append-system-prompt <project>/AGENT-PI.md \
    "<prompt>"
 ```
 
-- thinking 最高檔 `max`（本檔指定；若該版本不支援 max 則退 `xhigh` 並於 EOR 註明）。
+- thinking 最高檔 `xhigh`（本案指定；不依賴 pi 預設值）。
 - session 隔離：`--session-dir` 指向該 worktree 專屬目錄，禁止跨專案共用。
 
 ## 4. 本案測試基準

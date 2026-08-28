@@ -16,10 +16,11 @@
 
 ## 2. coding 模型配置
 
-- 模型：`deepseek-v4-flash:0731-cloud`（ollama 本機通道）
-- pi：`pi -p --provider ollama --model deepseek-v4-flash:0731-cloud --thinking max --session-dir <wt>/.pi-sessions --append-system-prompt <project>/AGENT-PI.md "<prompt>"`
-- Codex：`codex exec --oss --local-provider ollama --model deepseek-v4-flash:0731-cloud --skip-git-repo-check --sandbox danger-full-access "<prompt>"`（0.149.x 用 `--oss --local-provider`，無 `--provider` 參數）
-- 不依賴本機預設值，命令一律明確指定 model。
+- 模型：`gpt-5.6-luna`（openai-codex provider）
+- reasoning/thinking：Codex `xhigh`；pi `--thinking xhigh`。
+- pi：`pi -p --provider openai-codex --model gpt-5.6-luna --thinking xhigh --session-dir <wt>/.pi-sessions --append-system-prompt <project>/AGENT-PI.md "<prompt>"`
+- Codex：`codex exec --model gpt-5.6-luna -c 'model_reasoning_effort="xhigh"' --sandbox danger-full-access --skip-git-repo-check "<prompt>"`
+- 不依賴本機預設值，命令一律明確指定 provider、model 與 reasoning。
 
 ## 3. 執行流程（濃縮）
 

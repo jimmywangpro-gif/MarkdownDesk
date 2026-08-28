@@ -26,8 +26,9 @@
 ## 3. 啟動命令（Hermes 填入任務）
 
 ```
-codex exec --oss --local-provider ollama --model deepseek-v4-flash:0731-cloud \
-  --skip-git-repo-check --sandbox danger-full-access "<prompt>"
+codex exec --model gpt-5.6-luna \
+  -c 'model_reasoning_effort="xhigh"' \
+  --sandbox danger-full-access --skip-git-repo-check "<prompt>"
 ```
 
 ## 4. prompt 模板
