@@ -330,6 +330,17 @@ function App() {
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
     >
+      <div className="title-bar" data-testid="title-bar">
+        <span className="title-path" data-testid="file-status">
+          {filePath ? filePath : "未命名"}
+          {dirty ? " •" : ""}
+        </span>
+        {operationStatus && (
+          <span className="file-status" data-testid="operation-status" role="status">
+            {operationStatus}
+          </span>
+        )}
+      </div>
       <header className="toolbar" data-testid="toolbar">
         <button
           type="button"
@@ -401,15 +412,6 @@ function App() {
         >
           <TrashIcon />
         </button>
-        <span className="file-status" data-testid="file-status">
-          {filePath ? filePath : "未命名"}
-          {dirty ? " •" : ""}
-        </span>
-        {operationStatus && (
-          <span className="file-status" data-testid="operation-status" role="status">
-            {operationStatus}
-          </span>
-        )}
         <div className="toolbar-group">
           {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
             <button
