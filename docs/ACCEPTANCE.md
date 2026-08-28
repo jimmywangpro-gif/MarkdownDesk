@@ -36,8 +36,8 @@
 
 - `docs/exec/t09.md` 記錄 T09 在獨立 worktree 的實際 macOS package run：Darwin arm64 DMG 首次為 3,778,078 bytes；main 最後一次重跑為 3,778,010 bytes，兩者 package-file guard 均 `VERIFIED`。
 - **AppImage 尺寸預算（2026-08-28 使用者核准）**：GitHub runner（ubuntu-22.04）實測 AppImage 為 81,885,688 bytes —— 格式內嵌 linuxdeploy runtime 與 webkit2gtk 依賴，15 MiB 對此格式不可達。size guard 改為 per-format：`appimage ≤ 100 MiB`，`dmg`/`nsis`/`deb` 維持 `≤ 15 MiB`。同次 runner 實測 deb 為 4,455,518 bytes（✓）。
-- **Windows runner**：NSIS 首跑因 Node 20.12+（CVE-2024-27980）`spawnSync npm.cmd EINVAL` 失敗；已改 `shell:true` 修正（commit `c8b03df`）。
-- `docs/packaging.md`、`.github/workflows/package.yml`、packaging scripts 與 commit `ae2874e` 證明 target mapping、manifest validation 與 CI workflow 設定；workflow 本身尚未在本次執行。
+- **Windows runner**：NSIS 首跑因 Node 20.12+（CVE-2024-27980）`spawnSync npm.cmd EINVAL` 失敗；已改 `shell:true` 修正（commit `c8b03df`）。修正後 runner（run 33179864092）三平台全綠：macOS dmg 3.78MB、Windows NSIS 2,193,694 bytes、Linux deb 4,455,540 bytes、AppImage 81,885,688 bytes，全部 `VERIFIED`。
+- `docs/packaging.md`、`.github/workflows/package.yml`、packaging scripts 與 commit `ae2874e` 證明 target mapping、manifest validation 與 CI workflow 設定；workflow 已於 run 33179864092 實際執行成功。
 - Windows NSIS、Linux deb/AppImage、installed footprint、安裝/啟動、簽章與 notarization 結果仍為 **UNVERIFIED**。
 
 ## Platform status at T10
