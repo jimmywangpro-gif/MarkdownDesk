@@ -192,6 +192,8 @@ body,
   .preview-content .hljs-builtin-name {
     color: #79c0ff;
   }
+}
+
 /* ===== T07: theme tokens + settings controls (appended; existing rules kept) ===== */
 
 :root {
