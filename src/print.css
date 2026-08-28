@@ -1,0 +1,174 @@
+/* The print surface is deliberately independent from the screen theme. */
+@media print {
+  @page {
+    margin: 16mm 14mm;
+  }
+
+  html,
+  body,
+  #root {
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  body {
+    font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  .app {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .toolbar {
+    display: none !important;
+  }
+
+  .workspace {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+
+  .editor-pane,
+  .editor-input {
+    display: none !important;
+  }
+
+  .preview-pane {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .preview-content {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .preview-content h1,
+  .preview-content h2,
+  .preview-content h3,
+  .preview-content h4,
+  .preview-content h5,
+  .preview-content h6,
+  .preview-content p,
+  .preview-content ul,
+  .preview-content ol,
+  .preview-content blockquote,
+  .preview-content table {
+    color: #000 !important;
+  }
+
+  .preview-content a {
+    color: #000 !important;
+  }
+
+  .preview-content code {
+    background: #f3f4f6 !important;
+    color: #000 !important;
+  }
+
+  .preview-content pre {
+    background: #f3f4f6 !important;
+    border: 1px solid #d1d5db;
+    color: #000 !important;
+    overflow: visible !important;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .preview-content pre code {
+    background: transparent !important;
+  }
+
+  /* Keep highlight.js tokens readable on white paper, including dark theme. */
+  .preview-content .hljs-keyword,
+  .preview-content .hljs-selector-tag,
+  .preview-content .hljs-literal,
+  .preview-content .hljs-section,
+  .preview-content .hljs-link {
+    color: #a61b29 !important;
+  }
+
+  .preview-content .hljs-string,
+  .preview-content .hljs-title,
+  .preview-content .hljs-name,
+  .preview-content .hljs-type,
+  .preview-content .hljs-attribute,
+  .preview-content .hljs-symbol,
+  .preview-content .hljs-bullet,
+  .preview-content .hljs-addition,
+  .preview-content .hljs-variable,
+  .preview-content .hljs-template-tag,
+  .preview-content .hljs-template-variable {
+    color: #0550ae !important;
+  }
+
+  .preview-content .hljs-comment,
+  .preview-content .hljs-quote,
+  .preview-content .hljs-deletion,
+  .preview-content .hljs-meta {
+    color: #57606a !important;
+  }
+
+  .preview-content .hljs-number,
+  .preview-content .hljs-regexp,
+  .preview-content .hljs-built_in,
+  .preview-content .hljs-builtin-name {
+    color: #8250df !important;
+  }
+
+  .preview-content table,
+  .preview-content pre,
+  .preview-content li,
+  .preview-content blockquote,
+  .preview-content figure {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .preview-content h1,
+  .preview-content h2,
+  .preview-content h3,
+  .preview-content h4,
+  .preview-content h5,
+  .preview-content h6 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .preview-content table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .preview-content th,
+  .preview-content td {
+    border: 1px solid #666;
+    padding: 0.35em 0.55em;
+  }
+
+  .preview-content img {
+    max-width: 100% !important;
+  }
+}
