@@ -157,7 +157,6 @@ function App() {
       if (filePathRef.current) void unwatchFile(filePathRef.current);
     };
   }, []);
->>>>>>> feat/t04-file-integration
 
   return (
     <main className="app">
