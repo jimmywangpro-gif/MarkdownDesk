@@ -192,6 +192,8 @@ body,
   .preview-content .hljs-builtin-name {
     color: #79c0ff;
   }
+}
+
 /* ===== T07: theme tokens + settings controls (appended; existing rules kept) ===== */
 
 :root {
@@ -270,4 +272,23 @@ body,
 .toolbar-button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ===== T03: tri-mode split view (appended; existing rules kept) ===== */
+
+.workspace {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.workspace .pane {
+  flex: 1 1 50%;
+  min-width: 0;
+}
+
+.toolbar-button[aria-pressed="true"] {
+  background-color: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
 }
