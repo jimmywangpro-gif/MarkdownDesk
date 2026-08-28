@@ -55,7 +55,7 @@ body,
 }
 
 .preview-content {
-  max-width: 65ch;
+  max-width: none;
 }
 
 .preview-content h1,
