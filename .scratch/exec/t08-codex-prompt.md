@@ -8,10 +8,10 @@ Implement/modify ONLY:
 - src-tauri/capabilities/（僅 append 最小必要權限）
 - src/dnd.ts（新建：拖放開檔處理）
 - src/dnd.test.ts（新建：先 RED 後 GREEN）
-- src/App.tsx（僅 append：拖放事件接線 + 開檔整合呼叫既有 fileOps）
 - src/previewLinks.ts（新建：外部連結攔截導系統瀏覽器）
 - src/previewLinks.test.ts（新建）
-Do NOT modify: renderMarkdown.ts、既有測試檔、檔案整合核心邏輯、主題/設定。
+Do NOT modify: src/App.tsx、renderMarkdown.ts、既有測試檔、檔案整合核心邏輯、主題/設定。
+T09 將在所有 feature modules 合併後統一把 dnd/previewLinks seams 接到 App；本票不要自行修改共享 UI。
 
 [Pre-work — read-first]
 - src-tauri/tauri.conf.json 與 capabilities/（現況）
@@ -19,7 +19,7 @@ Do NOT modify: renderMarkdown.ts、既有測試檔、檔案整合核心邏輯、
 - src/App.tsx（整合點）
 
 [Task]
-1. 拖放：.md 檔拖入視窗 → 讀檔開啟（複用既有開檔路徑含 dirty guard；拖放前未存變更須先攔截確認）。非 .md 檔案忽略並提示。
+1. dnd：提供可由 App 呼叫的拖放事件處理 seam：判定 `.md` 檔、非 `.md` 忽略並回傳可顯示的結果；dirty guard 由 callback/參數注入，既有 fileOps 的開檔呼叫由 T09 整合。
 2. 外部連結：預覽區連結點擊攔截 — http(s)/mailto 開系統瀏覽器（tauri opener plugin 或 shell），webview 本身不導航；文件內部錨點不攔截。
 3. CSP 鎖定：tauri.conf.json security.csp 設最小必要（default-src 'self'；style-src 'self' 'unsafe-inline' 若高亮樣式需要；禁 remote origin、禁 unsafe-eval；img-src 限 data: 與 asset 協議若有需要）。
 4. capabilities 最小化：僅放行已用 plugin 權限，移除/不新增多餘權限。

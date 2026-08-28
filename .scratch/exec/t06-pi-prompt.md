@@ -6,13 +6,13 @@ worktree：/tmp/markdowndesk-t06（分支 feat/t06-export-pdf，自 main 建立�
 Implement/modify ONLY:
 - src/lib/printPdf.ts（新建：webview 原生列印觸發邏輯）
 - src/lib/printPdf.test.ts（新建：先 RED 後 GREEN）
-- src/App.tsx（僅 append：工具列「匯出 PDF」按鈕）
 - src/print.css（新建：列印樣式 — 白底黑字、與螢幕主題脫鉤、分頁合理）
 - index.html 或 main.tsx（僅 append print.css 引入，若採 link media=print 方式）
-Do NOT modify: renderMarkdown.ts、exportHtml、檔案整合、主題/設定既有邏輯、src-tauri/**（webview 列印為前端能力，不需 Rust）。
+Do NOT modify: src/App.tsx、renderMarkdown.ts、exportHtml、檔案整合、主題/設定既有邏輯、src-tauri/**（webview 列印為前端能力，不需 Rust）。
+T09 將在所有 feature modules 合併後統一把 printPdf seam 接到 App toolbar；本票不要自行修改共享 UI。
 
 [Pre-work — read-first]
-- src/App.tsx（工具列現況與 T05 匯出按鈕並存）
+- src/App.tsx（T03/T04/T07 現況；本票不修改，T09 才接線）
 - src/App.css（螢幕樣式，列印須覆蓋）
 
 [Task]

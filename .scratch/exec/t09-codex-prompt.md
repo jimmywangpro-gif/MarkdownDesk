@@ -9,11 +9,17 @@ Implement/modify ONLY:
 - scripts/（新增打包/驗證腳本）
 - .github/workflows/（新增跨平台 release/build workflow；若 repo 尚未使用 GitHub Actions，可建立最小 workflow）
 - docs/packaging.md（打包與平台限制說明）
-Do NOT modify src/**、src-tauri/src/**、既有測試、rendering/file/settings/security 功能。
+- src/App.tsx（唯一整合 owner：只接線既有 T05/T06/T08 public seams，不重寫功能模組）
+- src/App.integration.test.tsx（若需新增整合測試；先 RED 後 GREEN）
+Do NOT modify src/lib/renderMarkdown.ts、src/lib/fileOps.ts、src-tauri/src/**、既有 feature tests。
+
+[T09 integration responsibility]
+T05/T06/T08 agents intentionally do not touch App.tsx. After those branches are merged, this stream must wire exportHtml, printPdf, dnd and previewLinks into the existing App while preserving T03/T04/T07 behavior; then perform packaging. App integration is part of this ticket's acceptance.
 
 [Pre-work — read-first]
 - 讀取 docs/SPEC.md 與 issue 09。
 - 讀取 src-tauri/tauri.conf.json、package.json、目前 OS/targets/toolchain。
+- 讀取已合併的 T05/T06/T08 public modules 與 tests，確認實際 API 後再設計 App wiring；不猜介面。
 - 先確認 Tauri CLI 的實際 `--bundles`/target 行為，不猜命令。
 
 [Task]
