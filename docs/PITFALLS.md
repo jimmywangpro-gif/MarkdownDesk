@@ -13,3 +13,5 @@
 - 2026-08-28：Codex ollama 長任務尾端可能連線中斷（`invalid reasoning value "xhigh"` + Reconnecting 5 次）exit 1，但程式碼已寫畢 — 先 commit 部分成果再檢查，常可救回完整交付。（影響：codex ollama 派工）
 - 2026-08-28：合併衝突後若只跑 vitest，殘留衝突標記可能漏抓（測試檔編譯失敗會被靜默跳過）；**合併後必跑 `npm run build`（tsc）才算 L5 過**。（影響：所有合併驗證）
 - 2026-08-28：並行分支同時 append 同檔（App.css/App.tsx/lib.rs）必生衝突；prompt 已聲明 append-only 可降低但不能消除，合併順序 + Hermes 手工融合是必要工序。（影響：所有 W2+ 併行合併）
+- 2026-08-28：模型切換後，Codex/pi 必須在啟動命令同時明確指定 `gpt-5.6-luna` 與 `xhigh`；歷史 EOR 保留原實際模型，不能回填改寫。（影響：跨 session 派工可追溯性）
+- 2026-08-28：T03 舊分支未含 T04，整合分屏功能前必須先合併最新 main；否則 App.tsx 會遺失檔案流程。共享 App.tsx 已改由後續整合票指定唯一 owner。（影響：T03+後續 feature waves）
