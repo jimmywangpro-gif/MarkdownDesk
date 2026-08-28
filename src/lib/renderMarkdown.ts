@@ -106,6 +106,46 @@ interface HastNode {
   children?: HastNode[];
 }
 
+// GFM align attribute value → styleable class name (T12 table polish).
+const ALIGN_CLASSES: Record<string, string> = {
+  left: "align-left",
+  right: "align-right",
+  center: "align-center",
+};
+
+function wrapTable(node: HastNode): HastNode {
+  if (node.type === "element" && node.tagName === "table") {
+    return {
+      type: "element",
+      tagName: "div",
+      properties: { className: ["table-wrapper"] },
+      children: [node],
+    };
+  }
+  return node;
+}
+
+function applyAlignmentClasses(node: HastNode): void {
+  if (
+    node.type === "element" &&
+    (node.tagName === "th" || node.tagName === "td")
+  ) {
+    const align = node.properties?.align;
+    if (typeof align === "string" && ALIGN_CLASSES[align]) {
+      const rest = { ...(node.properties ?? {}) };
+      delete rest.align;
+      node.properties = {
+        ...rest,
+        className: [
+          ...((rest.className as string[] | undefined) ?? []),
+          ALIGN_CLASSES[align],
+        ],
+      };
+    }
+  }
+  for (const child of node.children ?? []) applyAlignmentClasses(child);
+}
+
 function stringifyHast(node: HastNode): string {
   if (node.type === "root") {
     return (node.children ?? []).map(stringifyHast).join("");
@@ -146,7 +186,12 @@ const processor = unified()
 export function renderMarkdown(source: string): string {
   const tree = processor.parse(source);
   const result = processor.runSync(tree);
-  return stringifyHast(result);
+  applyAlignmentClasses(result);
+  const polished = {
+    ...result,
+    children: (result.children ?? []).map(wrapTable),
+  };
+  return stringifyHast(polished);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +224,8 @@ export function renderMarkdownBlocks(source: string): MarkdownBlocksResult {
   const tree = processor.parse(source);
   const result = processor.runSync(tree);
 
+  applyAlignmentClasses(result);
+
   const blocks: MarkdownBlock[] = [];
   const children = result.children ?? [];
   let line = 1;
@@ -199,5 +246,12 @@ export function renderMarkdownBlocks(source: string): MarkdownBlocksResult {
     line = (child.position?.end?.line ?? startLine) + 1;
   });
 
-  return { html: stringifyHast(result), blocks };
+  // Wrap tables AFTER block indexing so block indices keep mapping to the
+  // same elements the sync-scroll logic queries.
+  const polished = {
+    ...result,
+    children: children.map(wrapTable),
+  };
+
+  return { html: stringifyHast(polished), blocks };
 }

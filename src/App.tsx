@@ -20,6 +20,22 @@ import { printPdf } from "./lib/printPdf";
 import { createDropHandler } from "./dnd";
 import { createPreviewLinkHandler } from "./previewLinks";
 import { useSyncScroll } from "./lib/useSyncScroll";
+import { useSplitRatio } from "./lib/useSplitRatio";
+import {
+  EditIcon,
+  EyeIcon,
+  FolderOpenIcon,
+  HtmlIcon,
+  MinusIcon,
+  MoonIcon,
+  PlusIcon,
+  PrinterIcon,
+  SaveAsIcon,
+  SaveIcon,
+  SplitIcon,
+  SunIcon,
+  TrashIcon,
+} from "./icons";
 import "./App.css";
 
 type Mode = "edit" | "view" | "split";
@@ -240,6 +256,19 @@ function App() {
   );
 
   useSyncScroll(editorRef, previewRef, blocks, mode === "split");
+  const { ratio, dividerProps, onMouseMove, onMouseUp } = useSplitRatio();
+
+  // Attach window-level mouse listeners while a divider drag is active.
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => onMouseMove(e);
+    const onUp = () => onMouseUp();
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [onMouseMove, onMouseUp]);
 
   // Mode shortcuts: Cmd/Ctrl+1/2/3 always; E/V/S only when not typing in the
   // editor (so plain letters keep working while editing).
@@ -306,36 +335,46 @@ function App() {
           type="button"
           onClick={() => void handleOpen()}
           data-testid="open-button"
+          aria-label="開啟檔案"
+          title="開啟檔案"
         >
-          開啟
+          <FolderOpenIcon />
         </button>
         <button
           type="button"
           onClick={() => void handleSave()}
           data-testid="save-button"
+          aria-label="儲存"
+          title="儲存 (⌘S)"
         >
-          儲存
+          <SaveIcon />
         </button>
         <button
           type="button"
           onClick={() => void handleSaveAs()}
           data-testid="save-as-button"
+          aria-label="另存新檔"
+          title="另存新檔"
         >
-          另存
+          <SaveAsIcon />
         </button>
         <button
           type="button"
           onClick={() => void handleExportHtml()}
           data-testid="export-html-button"
+          aria-label="匯出 HTML"
+          title="匯出 HTML"
         >
-          匯出 HTML
+          <HtmlIcon />
         </button>
         <button
           type="button"
           onClick={() => void handlePrintPdf()}
           data-testid="print-pdf-button"
+          aria-label="列印 PDF"
+          title="列印 PDF"
         >
-          列印 PDF
+          <PrinterIcon />
         </button>
         <select
           aria-label="最近檔案"
@@ -357,8 +396,10 @@ function App() {
           type="button"
           onClick={() => void handleClearRecent()}
           data-testid="clear-recent-button"
+          aria-label="清除最近檔案"
+          title="清除最近檔案"
         >
-          清除最近
+          <TrashIcon />
         </button>
         <span className="file-status" data-testid="file-status">
           {filePath ? filePath : "未命名"}
@@ -378,9 +419,13 @@ function App() {
               className="toolbar-button"
               data-testid={`mode-${m}`}
               aria-pressed={mode === m}
+              aria-label={`${MODE_LABELS[m]} 模式`}
+              title={`${MODE_LABELS[m]} 模式`}
               onClick={() => setMode(m)}
             >
-              {MODE_LABELS[m]}
+              {m === "edit" && <EditIcon />}
+              {m === "view" && <EyeIcon />}
+              {m === "split" && <SplitIcon />}
             </button>
           ))}
         </div>
@@ -390,9 +435,11 @@ function App() {
             type="button"
             className="toolbar-button"
             data-testid="theme-toggle"
+            aria-label={settings.theme === "light" ? "切換深色主題" : "切換淺色主題"}
+            title={settings.theme === "light" ? "切換深色主題" : "切換淺色主題"}
             onClick={() => setTheme(settings.theme === "light" ? "dark" : "light")}
           >
-            {settings.theme === "light" ? "Dark" : "Light"}
+            {settings.theme === "light" ? <MoonIcon /> : <SunIcon />}
           </button>
         </div>
         <div className="toolbar-group">
@@ -401,10 +448,11 @@ function App() {
             type="button"
             className="toolbar-button"
             data-testid="editor-font-decrease"
-            aria-label="Decrease editor font size"
+            aria-label="縮小編輯區字級"
+            title="縮小編輯區字級"
             onClick={() => setEditorFontSize(Math.max(8, settings.editorFontSize - 1))}
           >
-            −
+            <MinusIcon />
           </button>
           <span className="toolbar-value" data-testid="editor-font-size">
             {settings.editorFontSize}px
@@ -413,10 +461,11 @@ function App() {
             type="button"
             className="toolbar-button"
             data-testid="editor-font-increase"
-            aria-label="Increase editor font size"
+            aria-label="放大編輯區字級"
+            title="放大編輯區字級"
             onClick={() => setEditorFontSize(Math.min(32, settings.editorFontSize + 1))}
           >
-            +
+            <PlusIcon />
           </button>
         </div>
         <div className="toolbar-group">
@@ -425,10 +474,11 @@ function App() {
             type="button"
             className="toolbar-button"
             data-testid="preview-font-decrease"
-            aria-label="Decrease preview font size"
+            aria-label="縮小預覽區字級"
+            title="縮小預覽區字級"
             onClick={() => setPreviewFontSize(Math.max(8, settings.previewFontSize - 1))}
           >
-            −
+            <MinusIcon />
           </button>
           <span className="toolbar-value" data-testid="preview-font-size">
             {settings.previewFontSize}px
@@ -437,16 +487,21 @@ function App() {
             type="button"
             className="toolbar-button"
             data-testid="preview-font-increase"
-            aria-label="Increase preview font size"
+            aria-label="放大預覽區字級"
+            title="放大預覽區字級"
             onClick={() => setPreviewFontSize(Math.min(32, settings.previewFontSize + 1))}
           >
-            +
+            <PlusIcon />
           </button>
         </div>
       </header>
       <div className="workspace">
         {showEditor && (
-          <section className="pane editor-pane" data-testid="editor-pane">
+          <section
+            className="pane editor-pane"
+            data-testid="editor-pane"
+            style={{ flexBasis: `${ratio}%` }}
+          >
             <textarea
               ref={editorRef}
               className="editor-input"
@@ -459,6 +514,15 @@ function App() {
               spellCheck={false}
             />
           </section>
+        )}
+        {showEditor && showPreview && (
+          <div
+            className="split-divider"
+            data-testid="split-divider"
+            aria-label="調整編輯/預覽比例"
+            title="拖曳調整編輯/預覽比例"
+            {...dividerProps}
+          />
         )}
         {showPreview && (
           <section className="pane preview-pane" data-testid="preview-pane" ref={previewRef}>

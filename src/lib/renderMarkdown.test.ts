@@ -67,22 +67,22 @@ describe("renderMarkdown (T02 GFM golden)", () => {
 
   it("renders GFM tables with alignment", () => {
     expect(renderMarkdown("| a | b | c |\n| :- | -: | :-: |\n| 1 | 2 | 3 |")).toBe(
-      `<table>
+      `<div class="table-wrapper"><table>
 <thead>
 <tr>
-<th align="left">a</th>
-<th align="right">b</th>
-<th align="center">c</th>
+<th class="align-left">a</th>
+<th class="align-right">b</th>
+<th class="align-center">c</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td align="left">1</td>
-<td align="right">2</td>
-<td align="center">3</td>
+<td class="align-left">1</td>
+<td class="align-right">2</td>
+<td class="align-center">3</td>
 </tr>
 </tbody>
-</table>`
+</table></div>`
     );
   });
 

@@ -265,13 +265,89 @@ body,
   color: var(--fg);
   font-size: 13px;
   line-height: 1;
-  padding: 0.3rem 0.55rem;
+  padding: 0.35rem;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toolbar-button svg {
+  width: var(--icon-size, 15px);
+  height: var(--icon-size, 15px);
+  display: block;
 }
 
 .toolbar-button:hover {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ===== T12: table display polish (appended; existing rules kept) ===== */
+
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 0.75em 0;
+}
+
+.table-wrapper table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+}
+
+.table-wrapper th,
+.table-wrapper td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.45em 0.75em;
+  text-align: left;
+}
+
+.table-wrapper thead th {
+  background-color: var(--code-bg);
+  font-weight: 600;
+}
+
+.table-wrapper tbody tr:last-child th,
+.table-wrapper tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table-wrapper tbody tr:nth-child(even) {
+  background-color: var(--code-bg);
+}
+
+.table-wrapper th.align-left,
+.table-wrapper td.align-left {
+  text-align: left;
+}
+
+.table-wrapper th.align-right,
+.table-wrapper td.align-right {
+  text-align: right;
+}
+
+.table-wrapper th.align-center,
+.table-wrapper td.align-center {
+  text-align: center;
+}
+
+/* ===== T13: resizable split (appended; existing rules kept) ===== */
+
+.split-divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background-color: var(--border);
+  border-left: 1px solid var(--border);
+  transition: background-color 0.15s ease;
+}
+
+.split-divider:hover,
+.split-divider:focus-visible {
+  background-color: var(--accent);
+  outline: none;
 }
 
 /* ===== T03: tri-mode split view (appended; existing rules kept) ===== */
