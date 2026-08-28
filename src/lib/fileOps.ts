@@ -55,6 +55,18 @@ export function unwatchFile(path: string): Promise<void> {
   return invoke("unwatch_file", { path });
 }
 
+export async function onFileOpened(
+  handler: (path: string) => void,
+): Promise<UnlistenFn> {
+  try {
+    return await listen<string>("open-file", (event) => {
+      handler(event.payload);
+    });
+  } catch {
+    return () => {};
+  }
+}
+
 export async function onFileChanged(
   handler: (path: string) => void,
 ): Promise<UnlistenFn> {

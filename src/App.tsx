@@ -3,6 +3,7 @@ import { renderMarkdownBlocks } from "./lib/renderMarkdown";
 import { useSettings } from "./lib/SettingsContext";
 import {
   onFileChanged,
+  onFileOpened,
   openFile,
   readFile,
   recentFilesAdd,
@@ -138,6 +139,23 @@ function App() {
     [applyFile, refreshRecent],
   );
 
+  const handleOpenAssociatedPath = useCallback(
+    async (path: string) => {
+      if (dirty && !window.confirm("目前有未儲存的變更，確定要開啟其他檔案嗎？")) {
+        return;
+      }
+      try {
+        await handleOpenPath(path);
+        setOperationStatus(null);
+      } catch (error) {
+        setOperationStatus(
+          `開啟檔案失敗：${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    },
+    [dirty, handleOpenPath],
+  );
+
   const handleSaveAs = useCallback(async () => {
     const saved = await saveFileAs(source);
     if (!saved) return;
@@ -239,6 +257,18 @@ function App() {
       unlisten?.();
     };
   }, [applyFile]);
+
+  useEffect(() => {
+    let unlisten: UnlistenFn | undefined;
+    void onFileOpened((path) => {
+      void handleOpenAssociatedPath(path);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, [handleOpenAssociatedPath]);
 
   useEffect(() => {
     return () => {

@@ -9,7 +9,7 @@
 
 | # | User story（SPEC 原意） | 狀態 | 實際測試／證據 | 平台或文件缺口 |
 |---:|---|:---:|---|---|
-| 1 | 從 native file dialog 開啟 `.md` 檔 | **PARTIAL** | `src-tauri/src/commands.rs` 的 `open_file` 實作與 `read_file_at_reads_content_and_mtime`、`read_file_at_missing_file_returns_error`；`docs/exec/t04.md`。 | `open_file` 的原生 dialog、實際選檔與 macOS/Windows/Linux GUI 未執行。 |
+| 1 | 從 native file dialog 或 macOS file association 開啟 `.md` 檔 | **PARTIAL** | `src-tauri/src/commands.rs` 的 `open_file` 實作與 `read_file_at_reads_content_and_mtime`、`read_file_at_missing_file_returns_error`；`src-tauri/tauri.conf.json` 宣告 `.md`/`.markdown` association；`src-tauri/src/lib.rs` 處理 macOS `RunEvent::Opened`；`src/App.integration.test.tsx` 覆蓋 native association event 讀檔；`docs/exec/t04.md`。 | macOS bundle 的 `Info.plist` 已實際產生 `CFBundleDocumentTypes`；Finder「全部更改」與雙擊 GUI 尚未自動執行。Windows/Linux association routing 未納入本次範圍。 |
 | 2 | 編輯器旁即時顯示 preview | **PASS** | `src/App.test.tsx`：`renders editor and preview panes`、`shows preview updating live while typing`；`src/App.t03.test.tsx`。 | 只有測試環境 UI 證據，沒有額外的目標平台 GUI smoke。 |
 | 3 | preview 捲動跟隨 editor cursor | **PASS** | `src/App.t03.test.tsx`：`anchors preview scroll to the block under the editor caret`；同檔的 block mapping 測試。 | jsdom 以 `offsetTop` stub 驗證，未在實際 webview 長文件上驗證。 |
 | 4 | 依 GFM 渲染 tables | **PASS** | `src/lib/renderMarkdown.test.ts`：`renders GFM tables with alignment` golden test。 | 無額外平台缺口；renderer golden 不等於原生安裝驗證。 |

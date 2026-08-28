@@ -6,6 +6,17 @@ import App from "./App";
 import { saveHtmlFile } from "./lib/exportHtml";
 import { printPdf } from "./lib/printPdf";
 
+const eventMocks = vi.hoisted(() => ({
+  listen: vi.fn(),
+  openFileHandler: undefined as
+    | ((event: { payload: string }) => void)
+    | undefined,
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: eventMocks.listen,
+}));
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
@@ -29,6 +40,17 @@ const mockedPrintPdf = vi.mocked(printPdf);
 
 describe("App integration seams (T09)", () => {
   beforeEach(() => {
+    eventMocks.listen.mockReset();
+    eventMocks.openFileHandler = undefined;
+    eventMocks.listen.mockImplementation(
+      async (
+        event: string,
+        handler: (event: { payload: string }) => void,
+      ) => {
+        if (event === "open-file") eventMocks.openFileHandler = handler;
+        return vi.fn();
+      },
+    );
     mockedInvoke.mockImplementation(async (command) => {
       if (command === "recent_files_list") return [];
       return undefined;
@@ -78,6 +100,25 @@ describe("App integration seams (T09)", () => {
       expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe("# Dropped");
     });
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/dropped.md" });
+  });
+
+  it("opens a Markdown file delivered by the native file association event", async () => {
+    render(<App />);
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "recent_files_list") return [];
+      if (command === "read_file") {
+        return { path: "/tmp/from-finder.md", content: "# Finder", mtime: 3 };
+      }
+      return undefined;
+    });
+
+    await waitFor(() => expect(eventMocks.openFileHandler).toBeTypeOf("function"));
+    eventMocks.openFileHandler?.({ payload: "/tmp/from-finder.md" });
+
+    await waitFor(() => {
+      expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe("# Finder");
+    });
+    expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/from-finder.md" });
   });
 
   it("routes preview external links to the system opener", async () => {

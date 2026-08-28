@@ -9,6 +9,15 @@ const config = JSON.parse(
       csp?: string;
     };
   };
+  bundle?: {
+    fileAssociations?: Array<{
+      ext: string[];
+      name?: string;
+      role?: string;
+      rank?: string;
+      mimeType?: string;
+    }>;
+  };
 };
 
 function cspDirectives(): Record<string, string> {
@@ -27,5 +36,21 @@ describe("Tauri CSP", () => {
     expect(directives["style-src"]).toBe("'self'");
     expect(directives["connect-src"]).toContain("ipc: http://ipc.localhost");
     expect(directives["img-src"]).toContain("data: asset: http://asset.localhost");
+  });
+});
+
+describe("Tauri file associations", () => {
+  it("registers Markdown documents as editable macOS file types", () => {
+    const association = config.bundle?.fileAssociations?.find((item) =>
+      item.ext.includes("md"),
+    );
+
+    expect(association).toMatchObject({
+      ext: ["md", "markdown"],
+      name: "Markdown Document",
+      role: "Editor",
+      rank: "Default",
+      mimeType: "text/markdown",
+    });
   });
 });

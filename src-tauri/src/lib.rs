@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 mod commands;
 
@@ -55,6 +55,14 @@ fn write_settings_to(path: &Path, settings: &Settings) -> Result<(), String> {
     fs::write(path, raw).map_err(|e| e.to_string())
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn opened_file_paths(urls: Vec<tauri::Url>) -> Vec<String> {
+    urls.into_iter()
+        .filter_map(|url| url.to_file_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
 #[tauri::command]
 fn load_settings(app: tauri::AppHandle) -> Result<Option<Settings>, String> {
     let path = settings_path(&app)?;
@@ -70,6 +78,13 @@ fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+    #[test]
+    fn opened_file_urls_are_converted_to_paths() {
+        let url = tauri::Url::from_file_path("/tmp/finder-note.md").unwrap();
+        assert_eq!(opened_file_paths(vec![url]), vec!["/tmp/finder-note.md"]);
+    }
 
     #[test]
     fn greet_contains_name() {
@@ -127,7 +142,7 @@ mod settings_tests {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -146,8 +161,17 @@ pub fn run() {
             export_html_save_dialog,
             save_text_file
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+        if let tauri::RunEvent::Opened { urls } = event {
+            for path in opened_file_paths(urls) {
+                let _ = app_handle.emit("open-file", path);
+            }
+        }
+    });
 }
 
 // ---- T05: standalone HTML export -----------------------------------------

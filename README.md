@@ -117,3 +117,21 @@ npm run package -- --dry-run
 - **Linux AppImage**：執行 `chmod +x ./<實際產生的檔案>.AppImage`，再執行該 AppImage。
 
 目前 repository 沒有可供下載的 release artifact；Windows、Linux 的產出、安裝與執行，以及 macOS 的完整 DMG GUI smoke test，都必須以實際目標平台結果補上後才可改標為已驗證。
+
+## macOS 設定 `.md` 預設使用 MarkdownDesk
+
+MarkdownDesk 的 macOS bundle 已宣告支援 `.md` 與 `.markdown`，但 macOS 的預設開啟程式仍需由 Finder 設定。請先用 `npm run package` 產生並安裝最新 DMG 版本，再執行：
+
+1. 在 Finder 選取任一個 `.md` 檔案。
+2. 按 `⌘I` 開啟「取得資訊」。
+3. 在「開啟檔案方式」選單選擇 **MarkdownDesk**。若清單沒有它，選「其他⋯」，到 `/Applications/MarkdownDesk.app` 選取它，並勾選「永遠用此程式開啟」。
+4. 按「全部更改⋯」，確認後按「繼續」。
+5. 關閉資訊視窗；之後在 Finder 雙擊 `.md`／`.markdown` 就會以 MarkdownDesk 開啟。
+
+也可以用下面的命令快速測試已安裝的 app 是否能接收檔案：
+
+```sh
+open -a "/Applications/MarkdownDesk.app" "/path/to/example.md"
+```
+
+首次以 Finder 雙擊檔案時，MarkdownDesk 會透過 macOS `Opened` event 讀取檔案；若程式已有未儲存變更，會先顯示 dirty-state 確認。association 設定與 event routing 有自動測試，但 Finder 實際「全部更改」及雙擊 GUI 行為仍應在本機目視確認。

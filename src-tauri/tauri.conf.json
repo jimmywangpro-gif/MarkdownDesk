@@ -24,6 +24,15 @@
   "bundle": {
     "active": true,
     "targets": ["dmg", "nsis", "deb", "appimage"],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown Document",
+        "role": "Editor",
+        "rank": "Default",
+        "mimeType": "text/markdown"
+      }
+    ],
     "macOS": {
       "minimumSystemVersion": "12.0"
     },
