@@ -107,3 +107,28 @@ test("fails the size guard when a measured artifact exceeds the limit", () => {
 test("marks missing measurements as UNVERIFIED", () => {
   assert.deepEqual(validateSizeManifest({}), { valid: true, status: "UNVERIFIED" });
 });
+
+test("applies the format-specific 100 MiB budget to AppImage", () => {
+  const result = validateSizeManifest({
+    sizeLimitBytes: 15 * 1024 * 1024,
+    artifacts: [
+      { format: "appimage", path: "MarkdownDesk.AppImage", bytes: 90 * 1024 * 1024 },
+      { format: "deb", path: "MarkdownDesk.deb", bytes: 5 * 1024 * 1024 },
+    ],
+  });
+
+  assert.deepEqual(result, { valid: true, status: "VERIFIED" });
+});
+
+test("still fails an AppImage beyond the 100 MiB format budget", () => {
+  const result = validateSizeManifest({
+    sizeLimitBytes: 15 * 1024 * 1024,
+    artifacts: [{ format: "appimage", path: "MarkdownDesk.AppImage", bytes: 101 * 1024 * 1024 }],
+  });
+
+  assert.deepEqual(result, {
+    valid: false,
+    status: "FAILED",
+    oversized: ["MarkdownDesk.AppImage"],
+  });
+});

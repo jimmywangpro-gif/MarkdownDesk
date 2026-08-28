@@ -68,4 +68,12 @@ describe("toolbar iconography + tooltips (T11)", () => {
       expect(visibleText).toBe("");
     }
   });
+
+  it("removes group label captions (Mode/Theme/Editor/Preview) from the toolbar", () => {
+    renderApp();
+    expect(screen.queryByText("Mode")).toBeNull();
+    expect(screen.queryByText("Theme")).toBeNull();
+    expect(screen.queryByText("Editor")).toBeNull();
+    expect(screen.queryByText("Preview")).toBeNull();
+  });
 });

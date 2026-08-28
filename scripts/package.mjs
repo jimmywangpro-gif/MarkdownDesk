@@ -59,12 +59,15 @@ async function collectArtifacts(plan, buildStartedAt) {
 }
 
 function runTauriBuild(plan) {
-  const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+  // Node >= 20.12 (CVE-2024-27980) refuses to spawn .cmd/.bat files without
+  // an explicit shell; use shell:true on Windows to launch npm.cmd safely.
+  const useShell = process.platform === "win32";
+  const npmCommand = useShell ? "npm.cmd" : "npm";
   console.log(`Running native Tauri bundles: ${plan.bundles.join(", ")}`);
   const result = spawnSync(
     npmCommand,
     ["run", "tauri", "--", "build", "--ci", "--no-sign", "--bundles", ...plan.bundles],
-    { cwd: repoRoot, stdio: "inherit" },
+    { cwd: repoRoot, stdio: "inherit", shell: useShell },
   );
   if (result.error) throw result.error;
   if (result.status !== 0) {

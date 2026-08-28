@@ -411,7 +411,6 @@ function App() {
           </span>
         )}
         <div className="toolbar-group">
-          <span className="toolbar-label">Mode</span>
           {(Object.keys(MODE_LABELS) as Mode[]).map((m) => (
             <button
               key={m}
@@ -430,7 +429,6 @@ function App() {
           ))}
         </div>
         <div className="toolbar-group">
-          <span className="toolbar-label">Theme</span>
           <button
             type="button"
             className="toolbar-button"
@@ -443,7 +441,6 @@ function App() {
           </button>
         </div>
         <div className="toolbar-group">
-          <span className="toolbar-label">Editor</span>
           <button
             type="button"
             className="toolbar-button"
@@ -469,7 +466,6 @@ function App() {
           </button>
         </div>
         <div className="toolbar-group">
-          <span className="toolbar-label">Preview</span>
           <button
             type="button"
             className="toolbar-button"

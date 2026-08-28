@@ -9,6 +9,15 @@ export const REQUIRED_BUNDLE_TARGETS = Object.freeze([
 
 export const PACKAGE_SIZE_LIMIT_BYTES = 15 * 1024 * 1024;
 
+// Per-format package-file limits. AppImage embeds the linuxdeploy runtime
+// plus un SquashFS-compressed webkit2gtk dependencies, so the 15 MiB budget
+// is physically unreachable for the format (measured 81.9 MB on ubuntu-22.04);
+// the user-approved limit for appimage is 100 MiB. All other formats keep the
+// original 15 MiB budget.
+export const PACKAGE_SIZE_LIMITS_BY_FORMAT = Object.freeze({
+  appimage: 100 * 1024 * 1024,
+});
+
 const PACKAGING_PLANS = Object.freeze({
   darwin: {
     platform: "macos",
@@ -112,9 +121,9 @@ export function validateArtifactManifest(manifest, plan) {
 }
 
 export function validateSizeManifest(manifest) {
-  const limit = manifest?.sizeLimitBytes;
+  const defaultLimit = manifest?.sizeLimitBytes;
   const artifacts = manifest?.artifacts;
-  if (!Number.isSafeInteger(limit) || limit <= 0 || !Array.isArray(artifacts) || artifacts.length === 0) {
+  if (!Number.isSafeInteger(defaultLimit) || defaultLimit <= 0 || !Array.isArray(artifacts) || artifacts.length === 0) {
     return { valid: true, status: "UNVERIFIED" };
   }
 
@@ -123,7 +132,10 @@ export function validateSizeManifest(manifest) {
   }
 
   const oversized = artifacts
-    .filter((artifact) => artifact.bytes > limit)
+    .filter((artifact) => {
+      const limit = PACKAGE_SIZE_LIMITS_BY_FORMAT[artifact.format] ?? defaultLimit;
+      return artifact.bytes > limit;
+    })
     .map((artifact) => artifact.path);
   if (oversized.length > 0) {
     return { valid: false, status: "FAILED", oversized };
