@@ -145,8 +145,80 @@ pub fn run() {
             commands::recent_files_add,
             commands::recent_files_clear,
             commands::watch_file,
-            commands::unwatch_file
+            commands::unwatch_file,
+            export_html_save_dialog,
+            save_text_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+// ---- T05: standalone HTML export -----------------------------------------
+
+#[tauri::command]
+async fn export_html_save_dialog(
+    app: tauri::AppHandle,
+    suggested_file_name: Option<String>,
+) -> Result<Option<String>, String> {
+    let mut dialog = app
+        .dialog()
+        .file()
+        .add_filter("HTML", &["html", "htm"]);
+    if let Some(file_name) = suggested_file_name {
+        dialog = dialog.set_file_name(file_name);
+    }
+
+    let Some(picked) = dialog.blocking_save_file() else {
+        return Ok(None);
+    };
+    match picked {
+        tauri_plugin_dialog::FilePath::Path(path) => {
+            Ok(Some(path.to_string_lossy().to_string()))
+        }
+        tauri_plugin_dialog::FilePath::Url(_) => Err("不支援的檔案位置".into()),
+    }
+}
+
+fn write_text_file_at(path: &Path, content: &str) -> Result<(), String> {
+    fs::write(path, content).map_err(|e| format!("寫入檔案失敗: {e}"))
+}
+
+#[tauri::command]
+fn save_text_file(path: String, content: String) -> Result<(), String> {
+    write_text_file_at(Path::new(&path), &content)
+}
+
+#[cfg(test)]
+mod export_html_tests {
+    use super::*;
+
+    fn temp_export_dir() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "markdowndesk-t05-export-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn save_text_file_round_trips_in_a_temp_directory() {
+        let dir = temp_export_dir();
+        let path = dir.join("offline.html");
+        let content = "<!DOCTYPE html><html><body><h1>Notes</h1></body></html>";
+
+        save_text_file(path.to_string_lossy().into_owned(), content.to_string()).unwrap();
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), content);
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn export_html_commands_exist_for_registration() {
+        let _dialog_command = export_html_save_dialog;
+        let _write_command = save_text_file;
+    }
+}
+
+use tauri_plugin_dialog::DialogExt;
