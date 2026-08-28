@@ -148,3 +148,56 @@ export function renderMarkdown(source: string): string {
   const result = processor.runSync(tree);
   return stringifyHast(result);
 }
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// T03: block-anchored rendering for split-view sync scroll.
+//
+// renderMarkdownBlocks(source) returns the same sanitized HTML as
+// renderMarkdown(source), plus:
+//   - a `data-block-index` attribute on every top-level block element, and
+//   - a `blocks` array mapping each block index to the 1-based source line
+//     where the block starts.
+//
+// The editor caret line can then be mapped to a block via the largest
+// startLine <= caretLine, and the preview scrolled to that block's element.
+// The existing renderMarkdown pipeline is untouched; this helper reuses the
+// same processor and only annotates the hast tree before stringifying.
+// ---------------------------------------------------------------------------
+
+export interface MarkdownBlock {
+  index: number;
+  startLine: number;
+}
+
+export interface MarkdownBlocksResult {
+  html: string;
+  blocks: MarkdownBlock[];
+}
+
+export function renderMarkdownBlocks(source: string): MarkdownBlocksResult {
+  const tree = processor.parse(source);
+  const result = processor.runSync(tree);
+
+  const blocks: MarkdownBlock[] = [];
+  const children = result.children ?? [];
+  let line = 1;
+  let blockIndex = 0;
+
+  children.forEach((child) => {
+    if (child.type !== "element") return;
+    // Source positions survive the pipeline (remark → rehype → sanitize),
+    // giving exact 1-based start/end lines for each top-level block.
+    const startLine = child.position?.start?.line ?? line;
+    // Injected after sanitize, so the attribute survives rehype-sanitize.
+    child.properties = {
+      ...(child.properties ?? {}),
+      "data-block-index": String(blockIndex),
+    };
+    blocks.push({ index: blockIndex, startLine });
+    blockIndex += 1;
+    line = (child.position?.end?.line ?? startLine) + 1;
+  });
+
+  return { html: stringifyHast(result), blocks };
+}
