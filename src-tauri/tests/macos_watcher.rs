@@ -22,19 +22,23 @@ mod watcher_seam {
 
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir() -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
+    let sequence = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
-        "markdowndesk-r03-watcher-{}-{nonce}",
+        "markdowndesk-r03-watcher-{}-{nonce}-{sequence}",
         std::process::id()
     ));
-    fs::create_dir_all(&dir).unwrap();
+    fs::create_dir(&dir).unwrap();
     dir
 }
 

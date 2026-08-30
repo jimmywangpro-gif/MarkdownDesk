@@ -184,10 +184,11 @@ fn canonical_or_self(path: &Path) -> PathBuf {
 
 #[cfg(target_os = "macos")]
 fn watcher_path(path: &Path) -> PathBuf {
-    path.parent()
+    let parent = path
+        .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf()
+        .unwrap_or_else(|| Path::new("."));
+    canonical_or_self(parent)
 }
 
 #[cfg(not(target_os = "macos"))]
