@@ -159,6 +159,31 @@ describe("App file lifecycle remediation", () => {
     expect(screen.getByTestId("preview-pane").textContent).toContain("edited before save failure");
   });
 
+  it("preserves edited source and dirty state after an external-version save conflict", async () => {
+    fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
+    fileOpsMocks.saveFile.mockRejectedValue(new Error("external version conflict"));
+    render(<App />);
+    await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
+    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await setEditorText("edited before conflict");
+    await waitFor(() =>
+      expect(screen.getByTestId("preview-pane").textContent).toContain("edited before conflict"),
+    );
+
+    fireEvent.click(screen.getByTestId("save-button"));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("operation-status").textContent).toContain("external version conflict"),
+    );
+    expect(screen.getByTestId("preview-pane").textContent).toContain("edited before conflict");
+    expect(screen.getByTestId("file-status").textContent).toContain("•");
+    expect(fileOpsMocks.saveFile).toHaveBeenCalledWith(
+      "/tmp/live.md",
+      "edited before conflict",
+      10,
+    );
+  });
+
   it("reports external reload read failures without clearing edited source", async () => {
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
     render(<App />);
@@ -187,7 +212,9 @@ describe("App file lifecycle remediation", () => {
     await setEditorText("edited");
 
     fireEvent.click(screen.getByTestId("save-button"));
-    await waitFor(() => expect(fileOpsMocks.saveFile).toHaveBeenCalledWith("/tmp/live.md", "edited"));
+    await waitFor(() =>
+      expect(fileOpsMocks.saveFile).toHaveBeenCalledWith("/tmp/live.md", "edited", 10),
+    );
 
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "edited", 20));
     await act(async () => fileOpsMocks.fileChangedHandler?.("/tmp/live.md"));

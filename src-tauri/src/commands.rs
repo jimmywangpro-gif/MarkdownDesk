@@ -1,6 +1,12 @@
 use std::collections::HashMap;
 use std::fs;
+#[cfg(target_os = "macos")]
+use std::fs::OpenOptions;
+#[cfg(target_os = "macos")]
+use std::io::Write;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 
@@ -42,7 +48,18 @@ fn mtime_millis(path: &Path) -> Result<u64, String> {
         .map_err(|e| format!("讀取修改時間失敗: {e}"))?;
     modified
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
+        .map(|d| {
+            #[cfg(target_os = "macos")]
+            {
+                // Keep the version within JavaScript's safe integer range while
+                // avoiding millisecond collisions between rapid file changes.
+                d.as_micros() as u64
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                d.as_millis() as u64
+            }
+        })
         .map_err(|e| format!("修改時間無效: {e}"))
 }
 
@@ -56,8 +73,59 @@ pub fn read_file_at(path: &Path) -> Result<OpenedFile, String> {
     })
 }
 
+#[cfg(target_os = "macos")]
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(target_os = "macos")]
+fn write_file_atomically(path: &Path, content: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "寫入檔案失敗: 無效檔案路徑".to_string())?;
+    let nonce = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    for attempt in 0..100 {
+        let temporary = parent.join(format!(
+            ".{}.markdowndesk-{}-{nonce}-{attempt}.tmp",
+            file_name.to_string_lossy(),
+            std::process::id(),
+        ));
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("寫入檔案失敗: {error}")),
+        };
+
+        let result = (|| {
+            file.write_all(content.as_bytes())
+                .map_err(|error| format!("寫入檔案失敗: {error}"))?;
+            file.sync_all()
+                .map_err(|error| format!("寫入檔案失敗: {error}"))?;
+            drop(file);
+            fs::rename(&temporary, path).map_err(|error| format!("寫入檔案失敗: {error}"))
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        return result;
+    }
+
+    Err("寫入檔案失敗: 建立暫存檔失敗".to_string())
+}
+
 pub fn write_file_at(path: &Path, content: &str) -> Result<SavedFile, String> {
+    #[cfg(target_os = "macos")]
+    write_file_atomically(path, content)?;
+    #[cfg(not(target_os = "macos"))]
     fs::write(path, content).map_err(|e| format!("寫入檔案失敗: {e}"))?;
+
     let mtime = mtime_millis(path)?;
     Ok(SavedFile {
         path: path.to_string_lossy().to_string(),
@@ -163,8 +231,13 @@ pub fn read_file(path: String) -> Result<OpenedFile, String> {
 }
 
 #[tauri::command]
-pub fn save_file(path: String, content: String) -> Result<SavedFile, String> {
-    write_file_at(Path::new(&path), &content)
+pub fn save_file(path: String, content: String, expected_mtime: u64) -> Result<SavedFile, String> {
+    let path = Path::new(&path);
+    let actual_mtime = mtime_millis(path)?;
+    if actual_mtime != expected_mtime {
+        return Err("檔案已在載入後被外部修改，請重新載入後再儲存".to_string());
+    }
+    write_file_at(path, &content)
 }
 
 #[tauri::command]

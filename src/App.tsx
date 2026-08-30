@@ -236,7 +236,11 @@ function App() {
       return;
     }
     try {
-      const saved = await saveFile(filePath, source);
+      const expectedMtime = fileMtimeRef.current;
+      if (expectedMtime === null) {
+        throw new Error("找不到已載入檔案版本");
+      }
+      const saved = await saveFile(filePath, source, expectedMtime);
       fileMtimeRef.current = saved.mtime;
       setFileMtime(saved.mtime);
       setDirty(false);

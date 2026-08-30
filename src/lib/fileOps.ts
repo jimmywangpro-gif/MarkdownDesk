@@ -47,8 +47,12 @@ export function readFile(path: string): Promise<OpenedFile> {
   return invoke("read_file", { path });
 }
 
-export function saveFile(path: string, content: string): Promise<SavedFile> {
-  return invoke("save_file", { path, content });
+export function saveFile(
+  path: string,
+  content: string,
+  expectedMtime: number,
+): Promise<SavedFile> {
+  return invoke("save_file", { path, content, expectedMtime });
 }
 
 export function saveFileAs(content: string): Promise<SavedFile | null> {
