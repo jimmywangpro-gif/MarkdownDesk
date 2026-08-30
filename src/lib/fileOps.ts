@@ -19,6 +19,26 @@ export interface RecentFile {
   mtime: number;
 }
 
+interface NativeOpenedFileEvent {
+  id: number;
+  path: string;
+}
+
+const deliveredNativeEventIds = new Set<number>();
+
+function parseNativeOpenedFileEvent(payload: unknown): NativeOpenedFileEvent | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const event = payload as { id?: unknown; path?: unknown };
+  if (
+    typeof event.id !== "number" ||
+    !Number.isSafeInteger(event.id) ||
+    typeof event.path !== "string"
+  ) {
+    return null;
+  }
+  return { id: event.id, path: event.path };
+}
+
 export function openFile(): Promise<OpenedFile | null> {
   return invoke("open_file");
 }
@@ -63,23 +83,44 @@ export async function onFileOpened(
   let unlisten: UnlistenFn | undefined;
 
   try {
-    unlisten = await listen<string>("open-file", (event) => {
-      if (registrationPhase) deliveredDuringRegistration.add(event.payload);
-      handler(event.payload);
+    unlisten = await listen<NativeOpenedFileEvent | string>("open-file", (event) => {
+      const nativeEvent = parseNativeOpenedFileEvent(event.payload);
+      if (!nativeEvent) {
+        if (typeof event.payload !== "string") return;
+        if (registrationPhase) deliveredDuringRegistration.add(event.payload);
+        handler(event.payload);
+        return;
+      }
+
+      if (deliveredNativeEventIds.has(nativeEvent.id)) return;
+      deliveredNativeEventIds.add(nativeEvent.id);
+      handler(nativeEvent.path);
+      void invoke("ack_opened_files", { ids: [nativeEvent.id] })
+        .then(() => deliveredNativeEventIds.delete(nativeEvent.id))
+        .catch(() => {
+          // Browser-only mode and older bundles do not provide native acknowledgements.
+        });
     });
 
-    let pendingPaths: string[] = [];
+    let pendingEvents: Array<NativeOpenedFileEvent | string> = [];
     try {
       const queued = await invoke<unknown>("take_opened_files");
       if (Array.isArray(queued)) {
-        pendingPaths = queued.filter((path): path is string => typeof path === "string");
+        pendingEvents = queued.filter((event): event is NativeOpenedFileEvent | string => {
+          return typeof event === "string" || parseNativeOpenedFileEvent(event) !== null;
+        });
       }
     } catch {
       // Browser-only mode and older bundles do not provide the native queue.
     }
 
-    for (const path of pendingPaths) {
-      if (!deliveredDuringRegistration.has(path)) handler(path);
+    for (const event of pendingEvents) {
+      if (typeof event === "string") {
+        if (!deliveredDuringRegistration.has(event)) handler(event);
+        continue;
+      }
+      if (deliveredNativeEventIds.delete(event.id)) continue;
+      handler(event.path);
     }
     registrationPhase = false;
     return unlisten;

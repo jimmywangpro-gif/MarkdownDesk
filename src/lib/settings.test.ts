@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from "./settings";
+import {
+  DEFAULT_SETTINGS,
+  loadSettings,
+  saveSettings,
+} from "./settings";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -18,6 +22,8 @@ describe("settings persistence (T07)", () => {
     mockedInvoke.mockResolvedValue(null);
     const settings = await loadSettings();
     expect(settings).toEqual(DEFAULT_SETTINGS);
+    expect(settings.windowState).toEqual({ width: 800, height: 600 });
+    expect(settings.splitRatio).toBe(33.3333);
   });
 
   it("merges partial saved settings over defaults", async () => {
@@ -27,6 +33,31 @@ describe("settings persistence (T07)", () => {
     expect(settings.editorFontSize).toBe(16);
     expect(settings.previewFontSize).toBe(DEFAULT_SETTINGS.previewFontSize);
     expect(settings.windowState).toEqual(DEFAULT_SETTINGS.windowState);
+    expect(settings.splitRatio).toBe(DEFAULT_SETTINGS.splitRatio);
+  });
+
+  it("merges partial window state and legacy settings safely", async () => {
+    mockedInvoke.mockResolvedValue({
+      windowState: { width: 1280, x: 24 },
+    });
+
+    const settings = await loadSettings();
+
+    expect(settings.windowState).toEqual({
+      width: 1280,
+      height: DEFAULT_SETTINGS.windowState.height,
+      x: 24,
+    });
+    expect(settings.splitRatio).toBe(DEFAULT_SETTINGS.splitRatio);
+    expect(settings.theme).toBe(DEFAULT_SETTINGS.theme);
+  });
+
+  it("clamps invalid saved split ratios to the supported boundary", async () => {
+    mockedInvoke.mockResolvedValue({ splitRatio: 100 });
+
+    const settings = await loadSettings();
+
+    expect(settings.splitRatio).toBe(85);
   });
 
   it("saves settings via the Rust command", async () => {
@@ -34,6 +65,17 @@ describe("settings persistence (T07)", () => {
     const next = { ...DEFAULT_SETTINGS, theme: "dark" as const };
     await saveSettings(next);
     expect(mockedInvoke).toHaveBeenCalledWith("save_settings", { settings: next });
+  });
+
+  it("clamps invalid split ratios before saving", async () => {
+    mockedInvoke.mockResolvedValue(undefined);
+
+    await saveSettings({ ...DEFAULT_SETTINGS, splitRatio: 0 });
+
+    expect(mockedInvoke).toHaveBeenCalledWith(
+      "save_settings",
+      expect.objectContaining({ settings: expect.objectContaining({ splitRatio: 15 }) }),
+    );
   });
 
   it("falls back to defaults when invoke fails (non-Tauri env)", async () => {

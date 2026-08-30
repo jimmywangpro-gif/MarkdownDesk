@@ -100,8 +100,14 @@ fn recent_files_clear_at(data_dir: &Path) -> Result<(), String> {
     recent_files_save(data_dir, &[])
 }
 
-fn is_external_modify(event: &Event, watched: &Path) -> bool {
-    matches!(event.kind, EventKind::Modify(_)) && event.paths.iter().any(|p| p == watched)
+fn is_external_change(event: &Event, watched: &Path) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+    ) && event
+        .paths
+        .iter()
+        .any(|path| canonical_or_self(path) == watched)
 }
 
 fn canonical_or_self(path: &Path) -> PathBuf {
@@ -116,7 +122,7 @@ fn spawn_watcher(
     let emit_path = path.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
         if let Ok(event) = res {
-            if is_external_modify(&event, &watched) {
+            if is_external_change(&event, &watched) {
                 on_change(emit_path.clone());
             }
         }
@@ -200,6 +206,11 @@ pub fn recent_files_clear(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn watch_file(app: AppHandle, path: String) -> Result<(), String> {
     let watched = PathBuf::from(&path);
+    let key = canonical_or_self(&watched);
+    let mut active_watchers = watchers().lock().unwrap();
+    if active_watchers.contains_key(&key) {
+        return Ok(());
+    }
     let watcher = spawn_watcher(watched.clone(), move |changed| {
         let _ = app.emit(
             "file-changed",
@@ -208,10 +219,7 @@ pub fn watch_file(app: AppHandle, path: String) -> Result<(), String> {
             },
         );
     })?;
-    watchers()
-        .lock()
-        .unwrap()
-        .insert(canonical_or_self(&watched), watcher);
+    active_watchers.insert(key, watcher);
     Ok(())
 }
 
@@ -307,29 +315,45 @@ mod tests {
     }
 
     #[test]
-    fn is_external_modify_filters_events() {
+    fn is_external_change_filters_events() {
         let watched = Path::new("/tmp/note.md");
         let modify = Event::new(EventKind::Modify(notify::event::ModifyKind::Data(
             notify::event::DataChange::Any,
         )))
         .add_path(watched.to_path_buf());
-        assert!(is_external_modify(&modify, watched));
+        assert!(is_external_change(&modify, watched));
 
         let access = Event::new(EventKind::Access(notify::event::AccessKind::Close(
             notify::event::AccessMode::Any,
         )))
         .add_path(watched.to_path_buf());
-        assert!(!is_external_modify(&access, watched));
+        assert!(!is_external_change(&access, watched));
 
         let create = Event::new(EventKind::Create(notify::event::CreateKind::File))
             .add_path(watched.to_path_buf());
-        assert!(!is_external_modify(&create, watched));
+        assert!(is_external_change(&create, watched));
+
+        let remove = Event::new(EventKind::Remove(notify::event::RemoveKind::File))
+            .add_path(watched.to_path_buf());
+        assert!(is_external_change(&remove, watched));
 
         let other_path = Event::new(EventKind::Modify(notify::event::ModifyKind::Data(
             notify::event::DataChange::Any,
         )))
         .add_path(PathBuf::from("/tmp/other.md"));
-        assert!(!is_external_modify(&other_path, watched));
+        assert!(!is_external_change(&other_path, watched));
+    }
+
+    #[test]
+    fn is_external_change_classifies_replacement_events_for_watched_path() {
+        let watched = Path::new("/tmp/note.md");
+        let replacement_remove = Event::new(EventKind::Remove(notify::event::RemoveKind::Any))
+            .add_path(watched.to_path_buf());
+        let replacement_create = Event::new(EventKind::Create(notify::event::CreateKind::Any))
+            .add_path(watched.to_path_buf());
+
+        assert!(is_external_change(&replacement_remove, watched));
+        assert!(is_external_change(&replacement_create, watched));
     }
 
     #[test]

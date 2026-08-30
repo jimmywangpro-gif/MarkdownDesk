@@ -10,8 +10,10 @@ import {
   DEFAULT_SETTINGS,
   loadSettings,
   saveSettings,
+  clampSplitRatio,
   type Settings,
   type Theme,
+  type WindowState,
 } from "./settings";
 
 export interface SettingsContextValue {
@@ -20,6 +22,8 @@ export interface SettingsContextValue {
   setTheme: (theme: Theme) => void;
   setEditorFontSize: (size: number) => void;
   setPreviewFontSize: (size: number) => void;
+  setWindowState: (windowState: WindowState) => void;
+  setSplitRatio: (ratio: number) => void;
 }
 
 // Default context lets <App /> render standalone (e.g. in existing tests)
@@ -30,6 +34,8 @@ const SettingsContext = createContext<SettingsContextValue>({
   setTheme: () => {},
   setEditorFontSize: () => {},
   setPreviewFontSize: () => {},
+  setWindowState: () => {},
+  setSplitRatio: () => {},
 });
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
@@ -70,6 +76,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setTheme: (theme) => setSettings((prev) => ({ ...prev, theme })),
       setEditorFontSize: (size) => setSettings((prev) => ({ ...prev, editorFontSize: size })),
       setPreviewFontSize: (size) => setSettings((prev) => ({ ...prev, previewFontSize: size })),
+      setWindowState: (windowState) => setSettings((prev) => ({ ...prev, windowState })),
+      setSplitRatio: (ratio) =>
+        setSettings((prev) => ({ ...prev, splitRatio: clampSplitRatio(ratio) })),
     }),
     [settings, loaded],
   );

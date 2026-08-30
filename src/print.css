@@ -38,6 +38,7 @@
   }
 
   .editor-pane,
+  .editor-host,
   .editor-input {
     display: none !important;
   }

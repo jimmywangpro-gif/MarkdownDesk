@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { SettingsProvider } from "./lib/SettingsContext";
+import { SettingsProvider, useSettings } from "./lib/SettingsContext";
 import App from "./App";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -16,6 +16,31 @@ function renderApp() {
     <SettingsProvider>
       <App />
     </SettingsProvider>,
+  );
+}
+
+function SettingsProbe() {
+  const { loaded, settings, setWindowState, setSplitRatio } = useSettings();
+
+  return (
+    <>
+      <output data-testid="settings-loaded">{String(loaded)}</output>
+      <output data-testid="split-ratio">{settings.splitRatio}</output>
+      <button
+        data-testid="set-window-state"
+        onClick={() =>
+          setWindowState({
+            width: 1280,
+            height: 720,
+            x: 24,
+            y: 48,
+            maximized: false,
+          })
+        }
+      />
+      <button data-testid="set-split-too-wide" onClick={() => setSplitRatio(100)} />
+      <button data-testid="set-split-too-narrow" onClick={() => setSplitRatio(0)} />
+    </>
   );
 }
 
@@ -88,5 +113,54 @@ describe("MarkdownDesk settings UI (T07)", () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     expect(screen.getByTestId("editor-font-size").textContent).toBe("18px");
     expect(screen.getByTestId("preview-font-size").textContent).toBe("20px");
+  });
+
+  it("exposes semantic window and split setters that persist after loading", async () => {
+    render(
+      <SettingsProvider>
+        <SettingsProbe />
+      </SettingsProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("settings-loaded").textContent).toBe("true"));
+    mockedInvoke.mockClear();
+
+    fireEvent.click(screen.getByTestId("set-window-state"));
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        "save_settings",
+        expect.objectContaining({
+          settings: expect.objectContaining({
+            windowState: {
+              width: 1280,
+              height: 720,
+              x: 24,
+              y: 48,
+              maximized: false,
+            },
+          }),
+        }),
+      ),
+    );
+
+    mockedInvoke.mockClear();
+    fireEvent.click(screen.getByTestId("set-split-too-wide"));
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        "save_settings",
+        expect.objectContaining({ settings: expect.objectContaining({ splitRatio: 85 }) }),
+      ),
+    );
+    expect(screen.getByTestId("split-ratio").textContent).toBe("85");
+
+    mockedInvoke.mockClear();
+    fireEvent.click(screen.getByTestId("set-split-too-narrow"));
+    await waitFor(() =>
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        "save_settings",
+        expect.objectContaining({ settings: expect.objectContaining({ splitRatio: 15 }) }),
+      ),
+    );
+    expect(screen.getByTestId("split-ratio").textContent).toBe("15");
   });
 });

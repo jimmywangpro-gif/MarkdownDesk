@@ -41,10 +41,14 @@ body,
   border-right: 1px solid #d0d0d0;
 }
 
-.editor-input {
+.editor-host {
   width: 100%;
   height: 100%;
-  resize: none;
+  min-height: 0;
+}
+
+.editor-host .cm-editor {
+  height: 100%;
   border: none;
   outline: none;
   background: transparent;
@@ -52,6 +56,29 @@ body,
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
   line-height: 1.6;
+}
+
+.editor-host .cm-scroller {
+  overflow: auto;
+  font-family: inherit;
+  line-height: inherit;
+}
+
+.editor-host .cm-content {
+  min-height: 100%;
+  padding: 0;
+  caret-color: var(--accent);
+}
+
+.editor-host .cm-gutters {
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.editor-host .cm-activeLine,
+.editor-host .cm-activeLineGutter {
+  background-color: var(--code-bg);
 }
 
 .preview-content {
@@ -205,7 +232,7 @@ body,
   border-right-color: var(--border);
 }
 
-.editor-input {
+.editor-host .cm-editor {
   font-size: var(--editor-font-size, 14px);
 }
 

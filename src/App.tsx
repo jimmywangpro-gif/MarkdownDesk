@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { renderMarkdownBlocks } from "./lib/renderMarkdown";
+import { toggleTaskLine } from "./lib/taskEditing";
 import { useSettings } from "./lib/SettingsContext";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
@@ -23,6 +24,8 @@ import { createDropHandler, handleDropPaths } from "./dnd";
 import { createPreviewLinkHandler } from "./previewLinks";
 import { useSyncScroll } from "./lib/useSyncScroll";
 import { useSplitRatio } from "./lib/useSplitRatio";
+import { useWindowState } from "./lib/useWindowState";
+import { MarkdownEditor } from "./components/MarkdownEditor";
 import {
   EditIcon,
   EyeIcon,
@@ -51,22 +54,32 @@ const MODE_LABELS: Record<Mode, string> = {
   split: "Split",
 };
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function operationError(operation: string, error: unknown): string {
+  return `${operation}：${errorMessage(error)}`;
+}
+
 // Leading-edge debounce: the first change applies immediately (keeps typing
 // feel live), while changes within the debounce window are coalesced and
 // applied after the window closes.
 function useDebouncedValue(value: string, delay: number): string {
   const [debounced, setDebounced] = useState(value);
-  const pendingRef = useRef(false);
+  const pendingRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (value === debounced) return;
-    if (!pendingRef.current) {
-      pendingRef.current = true;
+    const now = Date.now();
+    if (pendingRef.current === null || now - pendingRef.current >= delay) {
+      pendingRef.current = now;
       setDebounced(value);
       return;
     }
+    pendingRef.current = now;
     const timer = setTimeout(() => {
-      pendingRef.current = false;
+      pendingRef.current = null;
       setDebounced(value);
     }, delay);
     return () => clearTimeout(timer);
@@ -78,14 +91,37 @@ function useDebouncedValue(value: string, delay: number): string {
 function App() {
   const [source, setSource] = useState(INITIAL_SOURCE);
   const [mode, setMode] = useState<Mode>("split");
-  const { settings, setTheme, setEditorFontSize, setPreviewFontSize } = useSettings();
+  const {
+    settings,
+    loaded: settingsLoaded,
+    setTheme,
+    setEditorFontSize,
+    setPreviewFontSize,
+    setWindowState,
+    setSplitRatio,
+  } = useSettings();
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileMtime, setFileMtime] = useState<number | null>(null);
   const [dirty, setDirty] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const [operationStatus, setOperationStatus] = useState<string | null>(null);
+  const [cursorOffset, setCursorOffset] = useState(0);
   const filePathRef = useRef<string | null>(null);
   const fileMtimeRef = useRef<number | null>(null);
+  const watchedPathRef = useRef<string | null>(null);
+
+  const reportWindowStateError = useCallback((message: string) => {
+    setOperationStatus(message);
+  }, []);
+
+  useWindowState({
+    loaded: settingsLoaded,
+    settings,
+    windowState: settings.windowState,
+    dirty,
+    setWindowState,
+    onError: reportWindowStateError,
+  });
 
   useEffect(() => {
     filePathRef.current = filePath;
@@ -95,20 +131,21 @@ function App() {
     fileMtimeRef.current = fileMtime;
   }, [fileMtime]);
 
-  const refreshRecent = useCallback(() => {
-    recentFilesList()
-      .then((files) => {
-        if (Array.isArray(files)) setRecentFiles(files);
-      })
-      .catch(() => {});
+  const refreshRecent = useCallback(async () => {
+    const files = await recentFilesList();
+    if (Array.isArray(files)) setRecentFiles(files);
   }, []);
 
   useEffect(() => {
-    refreshRecent();
+    void refreshRecent().catch((error) => {
+      setOperationStatus(operationError("載入最近檔案清單失敗", error));
+    });
   }, [refreshRecent]);
 
   const applyFile = useCallback(
     (file: { path: string; content: string; mtime: number }) => {
+      filePathRef.current = file.path;
+      fileMtimeRef.current = file.mtime;
       setSource(file.content);
       setFilePath(file.path);
       setFileMtime(file.mtime);
@@ -117,27 +154,46 @@ function App() {
     [],
   );
 
+  const switchWatchedFile = useCallback(async (path: string) => {
+    const previousPath = watchedPathRef.current;
+    if (previousPath === path) return;
+
+    await watchFile(path);
+    if (previousPath) await unwatchFile(previousPath);
+    watchedPathRef.current = path;
+  }, []);
+
+  const commitOpenedFile = useCallback(
+    async (file: { path: string; content: string; mtime: number }) => {
+      await recentFilesAdd(file.path);
+      await refreshRecent();
+      await switchWatchedFile(file.path);
+      applyFile(file);
+    },
+    [applyFile, refreshRecent, switchWatchedFile],
+  );
+
   const handleOpen = useCallback(async () => {
     if (dirty && !window.confirm("目前有未儲存的變更，確定要開啟其他檔案嗎？")) {
       return;
     }
-    const file = await openFile();
-    if (!file) return;
-    applyFile(file);
-    await recentFilesAdd(file.path);
-    await watchFile(file.path);
-    refreshRecent();
-  }, [dirty, applyFile, refreshRecent]);
+    try {
+      const file = await openFile();
+      if (!file) return;
+      await commitOpenedFile(file);
+      setOperationStatus(null);
+    } catch (error) {
+      setOperationStatus(operationError("開啟檔案失敗", error));
+    }
+  }, [commitOpenedFile, dirty]);
 
   const handleOpenPath = useCallback(
     async (path: string) => {
       const file = await readFile(path);
-      applyFile(file);
-      await recentFilesAdd(file.path);
-      await watchFile(file.path);
-      refreshRecent();
+      await commitOpenedFile(file);
+      setOperationStatus(null);
     },
-    [applyFile, refreshRecent],
+    [commitOpenedFile],
   );
 
   const handleOpenAssociatedPath = useCallback(
@@ -147,10 +203,9 @@ function App() {
       }
       try {
         await handleOpenPath(path);
-        setOperationStatus(null);
       } catch (error) {
         setOperationStatus(
-          `開啟檔案失敗：${error instanceof Error ? error.message : String(error)}`,
+          operationError("開啟檔案失敗", error),
         );
       }
     },
@@ -158,42 +213,66 @@ function App() {
   );
 
   const handleSaveAs = useCallback(async () => {
-    const saved = await saveFileAs(source);
-    if (!saved) return;
-    setFilePath(saved.path);
-    setFileMtime(saved.mtime);
-    setDirty(false);
-    await recentFilesAdd(saved.path);
-    await watchFile(saved.path);
-    refreshRecent();
-  }, [source, refreshRecent]);
+    try {
+      const saved = await saveFileAs(source);
+      if (!saved) return;
+      await recentFilesAdd(saved.path);
+      await refreshRecent();
+      await switchWatchedFile(saved.path);
+      filePathRef.current = saved.path;
+      fileMtimeRef.current = saved.mtime;
+      setFilePath(saved.path);
+      setFileMtime(saved.mtime);
+      setDirty(false);
+      setOperationStatus(null);
+    } catch (error) {
+      setOperationStatus(operationError("儲存失敗", error));
+    }
+  }, [refreshRecent, source, switchWatchedFile]);
 
   const handleSave = useCallback(async () => {
-    if (filePath) {
+    if (!filePath) {
+      await handleSaveAs();
+      return;
+    }
+    try {
       const saved = await saveFile(filePath, source);
+      fileMtimeRef.current = saved.mtime;
       setFileMtime(saved.mtime);
       setDirty(false);
       await recentFilesAdd(filePath);
-    } else {
-      await handleSaveAs();
+      await refreshRecent();
+      setOperationStatus(null);
+    } catch (error) {
+      setOperationStatus(operationError("儲存失敗", error));
     }
-  }, [filePath, source, handleSaveAs]);
+  }, [filePath, refreshRecent, source, handleSaveAs]);
 
   const handleLoadRecent = useCallback(
     async (path: string) => {
       if (dirty && !window.confirm("目前有未儲存的變更，確定要開啟其他檔案嗎？")) {
         return;
       }
-      const file = await readFile(path);
-      applyFile(file);
-      await watchFile(file.path);
+      try {
+        const file = await readFile(path);
+        await switchWatchedFile(file.path);
+        applyFile(file);
+        setOperationStatus(null);
+      } catch (error) {
+        setOperationStatus(operationError("載入最近檔案失敗", error));
+      }
     },
-    [dirty, applyFile],
+    [dirty, applyFile, switchWatchedFile],
   );
 
   const handleClearRecent = useCallback(async () => {
-    await recentFilesClear();
-    setRecentFiles([]);
+    try {
+      await recentFilesClear();
+      setRecentFiles([]);
+      setOperationStatus(null);
+    } catch (error) {
+      setOperationStatus(operationError("清除最近檔案失敗", error));
+    }
   }, []);
 
   const handleExportHtml = useCallback(async () => {
@@ -229,30 +308,27 @@ function App() {
   }, [handleSave]);
 
   useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirty) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [dirty]);
-
-  useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-    onFileChanged((path) => {
+    void onFileChanged((path) => {
       if (path !== filePathRef.current) return;
       readFile(path)
         .then((file) => {
+          if (path !== filePathRef.current) return;
           if (file.mtime === fileMtimeRef.current) return;
           if (window.confirm("檔案已在外部被修改，是否重新載入？")) {
             applyFile(file);
+            setOperationStatus(null);
           }
         })
-        .catch(() => {});
+        .catch((error) => {
+          if (path === filePathRef.current) {
+            setOperationStatus(operationError("外部檔案重新載入失敗", error));
+          }
+        });
     }).then((fn) => {
       unlisten = fn;
+    }).catch((error) => {
+      setOperationStatus(operationError("建立檔案監看失敗", error));
     });
     return () => {
       unlisten?.();
@@ -265,6 +341,8 @@ function App() {
       void handleOpenAssociatedPath(path);
     }).then((fn) => {
       unlisten = fn;
+    }).catch((error) => {
+      setOperationStatus(operationError("接收開啟檔案事件失敗", error));
     });
     return () => {
       unlisten?.();
@@ -285,12 +363,16 @@ function App() {
             onOpen: handleOpenPath,
           }).then((result) => {
             if (result.kind !== "opened") setOperationStatus(result.message);
+          }).catch((error) => {
+            setOperationStatus(operationError("拖放開啟失敗", error));
           });
         })
         .then((fn) => {
           unlisten = fn;
         })
-        .catch(() => {});
+        .catch((error) => {
+          setOperationStatus(operationError("建立原生拖放處理失敗", error));
+        });
     } catch {
       // Browser-only tests and the Vite preview do not expose Tauri webviews.
     }
@@ -305,7 +387,6 @@ function App() {
     };
   }, []);
 
-  const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLElement>(null);
 
   const debouncedSource = useDebouncedValue(source, RENDER_DEBOUNCE_MS);
@@ -314,8 +395,11 @@ function App() {
     [debouncedSource],
   );
 
-  useSyncScroll(editorRef, previewRef, blocks, mode === "split");
-  const { ratio, dividerProps, onMouseMove, onMouseUp } = useSplitRatio();
+  useSyncScroll(previewRef, blocks, source, cursorOffset, mode === "split");
+  const { ratio, dividerProps, onMouseMove, onMouseUp } = useSplitRatio(
+    settings.splitRatio,
+    setSplitRatio,
+  );
 
   // Attach window-level mouse listeners while a divider drag is active.
   useEffect(() => {
@@ -350,7 +434,12 @@ function App() {
         return;
       }
       if (mod || e.altKey || e.shiftKey) return;
-      if (e.target instanceof HTMLTextAreaElement) return;
+      if (
+        e.target instanceof HTMLElement &&
+        (e.target.isContentEditable || e.target.closest("[contenteditable='true']"))
+      ) {
+        return;
+      }
       const key = e.key.toLowerCase();
       if (key === "e") setMode("edit");
       else if (key === "v") setMode("view");
@@ -373,10 +462,34 @@ function App() {
     [dirty, handleOpenPath],
   );
   const previewLinkHandler = useMemo(() => createPreviewLinkHandler(), []);
+  const handlePreviewClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      const checkbox =
+        target instanceof Element
+          ? target.closest<HTMLInputElement>('input[data-task-line]')
+          : null;
+
+      if (checkbox && event.currentTarget.contains(checkbox)) {
+        const line = Number(checkbox.dataset.taskLine);
+        const nextSource = toggleTaskLine(source, line);
+        if (nextSource !== source) {
+          setSource(nextSource);
+          setDirty(true);
+        }
+        return;
+      }
+
+      void previewLinkHandler(event.nativeEvent);
+    },
+    [previewLinkHandler, source],
+  );
   const handleDrop = useCallback(
     (event: DragEvent<HTMLElement>) => {
       void dropHandler(event.nativeEvent).then((result) => {
         if (result.kind !== "opened") setOperationStatus(result.message);
+      }).catch((error) => {
+        setOperationStatus(operationError("拖放開啟失敗", error));
       });
     },
     [dropHandler],
@@ -395,7 +508,12 @@ function App() {
           {dirty ? " •" : ""}
         </span>
         {operationStatus && (
-          <span className="file-status" data-testid="operation-status" role="status">
+          <span
+            className="file-status"
+            data-testid="operation-status"
+            role="status"
+            aria-live="polite"
+          >
             {operationStatus}
           </span>
         )}
@@ -559,16 +677,13 @@ function App() {
             data-testid="editor-pane"
             style={{ flexBasis: `${ratio}%` }}
           >
-            <textarea
-              ref={editorRef}
-              className="editor-input"
-              data-testid="editor-input"
+            <MarkdownEditor
               value={source}
-              onChange={(e) => {
-                setSource(e.currentTarget.value);
+              onChange={(value) => {
+                setSource(value);
                 setDirty(true);
               }}
-              spellCheck={false}
+              onCursorChange={setCursorOffset}
             />
           </section>
         )}
@@ -585,7 +700,7 @@ function App() {
           <section className="pane preview-pane" data-testid="preview-pane" ref={previewRef}>
             <div
               className="preview-content"
-              onClick={(event) => void previewLinkHandler(event.nativeEvent)}
+              onClick={handlePreviewClick}
               dangerouslySetInnerHTML={{ __html: html }}
             />
           </section>
