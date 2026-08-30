@@ -21,6 +21,12 @@ export interface Settings {
 export const SPLIT_RATIO_MIN = 15;
 export const SPLIT_RATIO_MAX = 85;
 export const DEFAULT_SPLIT_RATIO = 33.3333;
+export const FONT_SIZE_MIN = 8;
+export const FONT_SIZE_MAX = 32;
+
+const U32_MAX = 4_294_967_295;
+const I32_MIN = -2_147_483_648;
+const I32_MAX = 2_147_483_647;
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "light",
@@ -38,6 +44,14 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
+function isNativeInteger(value: unknown, min: number, max: number): value is number {
+  return isFiniteNumber(value) && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function isFontSize(value: unknown): value is number {
+  return isNativeInteger(value, FONT_SIZE_MIN, FONT_SIZE_MAX);
+}
+
 export function clampSplitRatio(ratio: number): number {
   if (!Number.isFinite(ratio)) return DEFAULT_SPLIT_RATIO;
   return Math.round(Math.min(SPLIT_RATIO_MAX, Math.max(SPLIT_RATIO_MIN, ratio)) * 10000) / 10000;
@@ -46,18 +60,16 @@ export function clampSplitRatio(ratio: number): number {
 function mergeWindowState(raw: unknown): WindowState {
   const saved = isRecord(raw) ? raw : {};
   const windowState: WindowState = {
-    width:
-      isFiniteNumber(saved.width) && saved.width > 0
-        ? saved.width
-        : DEFAULT_SETTINGS.windowState.width,
-    height:
-      isFiniteNumber(saved.height) && saved.height > 0
-        ? saved.height
-        : DEFAULT_SETTINGS.windowState.height,
+    width: isNativeInteger(saved.width, 1, U32_MAX)
+      ? saved.width
+      : DEFAULT_SETTINGS.windowState.width,
+    height: isNativeInteger(saved.height, 1, U32_MAX)
+      ? saved.height
+      : DEFAULT_SETTINGS.windowState.height,
   };
 
-  if (isFiniteNumber(saved.x)) windowState.x = saved.x;
-  if (isFiniteNumber(saved.y)) windowState.y = saved.y;
+  if (isNativeInteger(saved.x, I32_MIN, I32_MAX)) windowState.x = saved.x;
+  if (isNativeInteger(saved.y, I32_MIN, I32_MAX)) windowState.y = saved.y;
   if (typeof saved.maximized === "boolean") windowState.maximized = saved.maximized;
 
   return windowState;
@@ -68,10 +80,10 @@ function mergeSettings(raw: unknown): Settings {
 
   return {
     theme: saved.theme === "dark" ? "dark" : saved.theme === "light" ? "light" : DEFAULT_SETTINGS.theme,
-    editorFontSize: isFiniteNumber(saved.editorFontSize)
+    editorFontSize: isFontSize(saved.editorFontSize)
       ? saved.editorFontSize
       : DEFAULT_SETTINGS.editorFontSize,
-    previewFontSize: isFiniteNumber(saved.previewFontSize)
+    previewFontSize: isFontSize(saved.previewFontSize)
       ? saved.previewFontSize
       : DEFAULT_SETTINGS.previewFontSize,
     windowState: mergeWindowState(saved.windowState),
@@ -93,10 +105,18 @@ export async function loadSettings(): Promise<Settings> {
 }
 
 /** Persist settings via the Rust backend. No-op outside Tauri. */
-export async function saveSettings(settings: Settings): Promise<void> {
-  try {
-    await invoke("save_settings", { settings: mergeSettings(settings) });
-  } catch {
-    // Non-Tauri environment: persistence is a no-op.
-  }
+let saveQueue: Promise<void> | null = null;
+
+export function saveSettings(settings: Settings): Promise<void> {
+  const normalized = mergeSettings(settings);
+  const write = async () => {
+    try {
+      await invoke("save_settings", { settings: normalized });
+    } catch {
+      // Non-Tauri environment: persistence is a no-op.
+    }
+  };
+
+  saveQueue = saveQueue === null ? write() : saveQueue.then(write);
+  return saveQueue;
 }

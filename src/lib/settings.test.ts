@@ -60,6 +60,33 @@ describe("settings persistence (T07)", () => {
     expect(settings.splitRatio).toBe(85);
   });
 
+  it("uses defaults for invalid persisted theme, font, and split values", async () => {
+    mockedInvoke.mockResolvedValue({
+      theme: "solarized",
+      editorFontSize: 0,
+      previewFontSize: 999,
+      splitRatio: "not-a-number",
+    });
+
+    await expect(loadSettings()).resolves.toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("uses default window geometry for values outside native ranges", async () => {
+    mockedInvoke.mockResolvedValue({
+      windowState: {
+        width: 4_294_967_296,
+        height: -1,
+        x: 2_147_483_648,
+        y: -2_147_483_649,
+        maximized: "yes",
+      },
+    });
+
+    const settings = await loadSettings();
+
+    expect(settings.windowState).toEqual(DEFAULT_SETTINGS.windowState);
+  });
+
   it("saves settings via the Rust command", async () => {
     mockedInvoke.mockResolvedValue(undefined);
     const next = { ...DEFAULT_SETTINGS, theme: "dark" as const };
@@ -78,8 +105,8 @@ describe("settings persistence (T07)", () => {
     );
   });
 
-  it("falls back to defaults when invoke fails (non-Tauri env)", async () => {
-    mockedInvoke.mockRejectedValue(new Error("not in tauri"));
+  it("falls back to defaults when persisted settings are corrupted", async () => {
+    mockedInvoke.mockRejectedValue(new SyntaxError("Unexpected end of JSON input"));
     const settings = await loadSettings();
     expect(settings).toEqual(DEFAULT_SETTINGS);
   });

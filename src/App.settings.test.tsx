@@ -44,6 +44,18 @@ function SettingsProbe() {
   );
 }
 
+function RapidSettingsProbe() {
+  const { loaded, setTheme, setEditorFontSize } = useSettings();
+
+  return (
+    <>
+      <output data-testid="rapid-settings-loaded">{String(loaded)}</output>
+      <button data-testid="rapid-set-dark" onClick={() => setTheme("dark")} />
+      <button data-testid="rapid-set-editor-font" onClick={() => setEditorFontSize(15)} />
+    </>
+  );
+}
+
 describe("MarkdownDesk settings UI (T07)", () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
@@ -162,5 +174,51 @@ describe("MarkdownDesk settings UI (T07)", () => {
       ),
     );
     expect(screen.getByTestId("split-ratio").textContent).toBe("15");
+  });
+
+  it("serializes rapid settings updates before issuing the next write", async () => {
+    render(
+      <SettingsProvider>
+        <RapidSettingsProbe />
+      </SettingsProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("rapid-settings-loaded").textContent).toBe("true"),
+    );
+    mockedInvoke.mockClear();
+
+    const savedPayloads: unknown[] = [];
+    let releaseFirstSave: () => void = () => {};
+    const firstSave = new Promise<void>((resolve) => {
+      releaseFirstSave = resolve;
+    });
+
+    mockedInvoke.mockImplementation(async (command, payload) => {
+      if (command !== "save_settings") return undefined;
+
+      savedPayloads.push(payload);
+      if (savedPayloads.length === 1) await firstSave;
+      return undefined;
+    });
+
+    try {
+      fireEvent.click(screen.getByTestId("rapid-set-dark"));
+      await waitFor(() => expect(savedPayloads).toHaveLength(1));
+
+      fireEvent.click(screen.getByTestId("rapid-set-editor-font"));
+
+      expect(savedPayloads).toHaveLength(1);
+
+      releaseFirstSave();
+      await waitFor(() => expect(savedPayloads).toHaveLength(2));
+      expect(savedPayloads[1]).toEqual(
+        expect.objectContaining({
+          settings: expect.objectContaining({ theme: "dark", editorFontSize: 15 }),
+        }),
+      );
+    } finally {
+      releaseFirstSave();
+    }
   });
 });
