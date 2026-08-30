@@ -59,6 +59,19 @@ describe("Tauri CSP", () => {
     expect(directives["connect-src"]).toContain("ipc: http://ipc.localhost");
     expect(directives["img-src"]).toContain("data: asset: http://asset.localhost");
   });
+
+  it("keeps executable and document-embedding capabilities explicitly locked down", () => {
+    const directives = cspDirectives();
+    const policy = config.app?.security?.csp ?? "";
+
+    expect(directives["default-src"]).toBe("'self'");
+    expect(directives["script-src"]).toBe("'self'");
+    expect(directives["style-src"]).toBe("'self'");
+    expect(directives["object-src"]).toBe("'none'");
+    expect(directives["base-uri"]).toBe("'none'");
+    expect(directives["form-action"]).toBe("'none'");
+    expect(policy).not.toMatch(/'unsafe-(?:inline|eval)'/);
+  });
 });
 
 describe("Tauri file associations", () => {

@@ -66,18 +66,56 @@ body {
 }
 .markdown-body ul,
 .markdown-body ol { padding-left: 2em; }
-.markdown-body table {
+
+.markdown-body .table-wrapper {
+  overflow-x: auto;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  margin: 0.75em 0;
+}
+
+.markdown-body .table-wrapper table {
   border-collapse: collapse;
-  display: block;
-  max-width: 100%;
-  overflow: auto;
+  width: 100%;
+  font-size: 0.95em;
 }
-.markdown-body th,
-.markdown-body td {
-  border: 1px solid #d0d7de;
-  padding: 0.35em 0.65em;
+
+.markdown-body .table-wrapper th,
+.markdown-body .table-wrapper td {
+  border-bottom: 1px solid #d0d0d0;
+  padding: 0.45em 0.75em;
+  text-align: left;
 }
-.markdown-body th { font-weight: 600; }
+
+.markdown-body .table-wrapper thead th {
+  background-color: rgba(0, 0, 0, 0.06);
+  font-weight: 600;
+}
+
+.markdown-body .table-wrapper tbody tr:last-child th,
+.markdown-body .table-wrapper tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown-body .table-wrapper tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.markdown-body .table-wrapper th.align-left,
+.markdown-body .table-wrapper td.align-left {
+  text-align: left;
+}
+
+.markdown-body .table-wrapper th.align-right,
+.markdown-body .table-wrapper td.align-right {
+  text-align: right;
+}
+
+.markdown-body .table-wrapper th.align-center,
+.markdown-body .table-wrapper td.align-center {
+  text-align: center;
+}
+
 .markdown-body input[type="checkbox"] { margin-right: 0.4em; }
 
 .markdown-body code {

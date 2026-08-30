@@ -48,4 +48,16 @@ describe("printPdf", () => {
     expect(printCss).toMatch(/page-break-inside\s*:\s*avoid/);
     expect(printCss).toContain("@page");
   });
+
+  it("prints only the document surface, excluding title and toolbar chrome", () => {
+    expect(printCss).toMatch(
+      /\.title-bar\s*\{\s*display:\s*none\s*!important;/,
+    );
+    expect(printCss).toMatch(
+      /\.toolbar\s*\{\s*display:\s*none\s*!important;/,
+    );
+    expect(printCss).toMatch(
+      /\.preview-content\s*\{[\s\S]*?width:\s*100%\s*!important;/,
+    );
+  });
 });
