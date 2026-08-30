@@ -22,6 +22,10 @@ import { saveHtmlFile } from "./lib/exportHtml";
 import { printPdf } from "./lib/printPdf";
 import { createDropHandler, handleDropPaths } from "./dnd";
 import { createPreviewLinkHandler } from "./previewLinks";
+import {
+  isMarkdownSourceWithinLimit,
+  MARKDOWN_SOURCE_LIMIT_MESSAGE,
+} from "./lib/documentLimit";
 import { useSyncScroll } from "./lib/useSyncScroll";
 import { useSplitRatio } from "./lib/useSplitRatio";
 import { useWindowState } from "./lib/useWindowState";
@@ -165,11 +169,21 @@ function App() {
   }, []);
 
   const commitOpenedFile = useCallback(
-    async (file: { path: string; content: string; mtime: number }) => {
-      await recentFilesAdd(file.path);
-      await refreshRecent();
+    async (
+      file: { path: string; content: string; mtime: number },
+      persistRecent = true,
+    ): Promise<boolean> => {
+      if (!isMarkdownSourceWithinLimit(file.content)) {
+        setOperationStatus(MARKDOWN_SOURCE_LIMIT_MESSAGE);
+        return false;
+      }
+      if (persistRecent) {
+        await recentFilesAdd(file.path);
+        await refreshRecent();
+      }
       await switchWatchedFile(file.path);
       applyFile(file);
+      return true;
     },
     [applyFile, refreshRecent, switchWatchedFile],
   );
@@ -181,8 +195,7 @@ function App() {
     try {
       const file = await openFile();
       if (!file) return;
-      await commitOpenedFile(file);
-      setOperationStatus(null);
+      if (await commitOpenedFile(file)) setOperationStatus(null);
     } catch (error) {
       setOperationStatus(operationError("開啟檔案失敗", error));
     }
@@ -191,8 +204,7 @@ function App() {
   const handleOpenPath = useCallback(
     async (path: string) => {
       const file = await readFile(path);
-      await commitOpenedFile(file);
-      setOperationStatus(null);
+      if (await commitOpenedFile(file)) setOperationStatus(null);
     },
     [commitOpenedFile],
   );
@@ -260,14 +272,12 @@ function App() {
       }
       try {
         const file = await readFile(path);
-        await switchWatchedFile(file.path);
-        applyFile(file);
-        setOperationStatus(null);
+        if (await commitOpenedFile(file, false)) setOperationStatus(null);
       } catch (error) {
         setOperationStatus(operationError("載入最近檔案失敗", error));
       }
     },
-    [dirty, applyFile, switchWatchedFile],
+    [commitOpenedFile, dirty],
   );
 
   const handleClearRecent = useCallback(async () => {
