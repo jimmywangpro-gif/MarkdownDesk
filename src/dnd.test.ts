@@ -26,6 +26,24 @@ describe("drag-and-drop file seam", () => {
     expect(onOpen).toHaveBeenCalledWith("/tmp/notes.md");
   });
 
+  it("opens dropped .markdown files case-insensitively", async () => {
+    const onOpen = vi.fn();
+
+    const result = await handleDrop(dataTransferWith({
+      name: "README.MARKDOWN",
+      path: "/tmp/README.MARKDOWN",
+    }), {
+      isDirty: false,
+      onOpen,
+    });
+
+    expect(result).toMatchObject({
+      kind: "opened",
+      path: "/tmp/README.MARKDOWN",
+    });
+    expect(onOpen).toHaveBeenCalledWith("/tmp/README.MARKDOWN");
+  });
+
   it("opens paths delivered by the Tauri native drop event", async () => {
     const onOpen = vi.fn();
 
@@ -39,6 +57,21 @@ describe("drag-and-drop file seam", () => {
       path: "/tmp/notes.md",
     });
     expect(onOpen).toHaveBeenCalledWith("/tmp/notes.md");
+  });
+
+  it("opens .markdown paths delivered by the Tauri native drop event case-insensitively", async () => {
+    const onOpen = vi.fn();
+
+    const result = await handleDropPaths(["/tmp/README.MarkDown"], {
+      isDirty: false,
+      onOpen,
+    });
+
+    expect(result).toMatchObject({
+      kind: "opened",
+      path: "/tmp/README.MarkDown",
+    });
+    expect(onOpen).toHaveBeenCalledWith("/tmp/README.MarkDown");
   });
 
   it("ignores non-markdown files without opening them", async () => {
@@ -55,6 +88,7 @@ describe("drag-and-drop file seam", () => {
     expect(result).toMatchObject({
       kind: "ignored",
       reason: "unsupported-file",
+      message: "已忽略：只支援 .md 和 .markdown 檔案。",
     });
     expect(onOpen).not.toHaveBeenCalled();
   });

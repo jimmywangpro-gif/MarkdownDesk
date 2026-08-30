@@ -20,7 +20,7 @@ function getFilePath(file: FileWithPath): string | null {
 }
 
 function isMarkdownName(name: string): boolean {
-  return /\.md$/i.test(name);
+  return /\.(?:md|markdown)$/i.test(name);
 }
 
 function getDataTransfer(source: DragEvent | DataTransfer): DataTransfer | null {
@@ -32,7 +32,7 @@ async function openMarkdownPath(path: string, options: DropOptions): Promise<Dro
     return {
       kind: "ignored",
       reason: "unsupported-file",
-      message: "已忽略：只支援 .md 檔案。",
+      message: "已忽略：只支援 .md 和 .markdown 檔案。",
     };
   }
 
@@ -88,7 +88,7 @@ export async function handleDrop(
     return {
       kind: "ignored",
       reason: "unsupported-file",
-      message: "已忽略：只支援 .md 檔案。",
+      message: "已忽略：只支援 .md 和 .markdown 檔案。",
     };
   }
 

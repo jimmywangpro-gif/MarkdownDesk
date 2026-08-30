@@ -2,8 +2,12 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(any(test, target_os = "macos", target_os = "ios", target_os = "android"))]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use tauri::{Emitter, Manager};
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+use tauri::Emitter;
+use tauri::Manager;
 
 mod commands;
 
@@ -27,6 +31,10 @@ pub struct WindowState {
     pub maximized: Option<bool>,
 }
 
+fn default_split_ratio() -> f64 {
+    33.3333
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -34,6 +42,8 @@ pub struct Settings {
     pub editor_font_size: u32,
     pub preview_font_size: u32,
     pub window_state: WindowState,
+    #[serde(default = "default_split_ratio")]
+    pub split_ratio: f64,
 }
 
 fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -64,16 +74,49 @@ fn opened_file_paths(urls: Vec<tauri::Url>) -> Vec<String> {
         .collect()
 }
 
-#[derive(Default)]
-struct PendingOpenFiles(Mutex<Vec<String>>);
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct OpenedFileEvent {
+    id: u64,
+    path: String,
+}
 
-fn take_pending_opened_files(pending: &PendingOpenFiles) -> Vec<String> {
-    std::mem::take(&mut *pending.0.lock().unwrap())
+#[derive(Default)]
+struct PendingOpenFiles {
+    #[cfg(any(test, target_os = "macos", target_os = "ios", target_os = "android"))]
+    next_id: AtomicU64,
+    files: Mutex<Vec<OpenedFileEvent>>,
+}
+
+#[cfg(any(test, target_os = "macos", target_os = "ios", target_os = "android"))]
+fn enqueue_pending_opened_file(pending: &PendingOpenFiles, path: String) -> OpenedFileEvent {
+    let event = OpenedFileEvent {
+        id: pending.next_id.fetch_add(1, Ordering::Relaxed),
+        path,
+    };
+    pending.files.lock().unwrap().push(event.clone());
+    event
+}
+
+fn take_pending_opened_files(pending: &PendingOpenFiles) -> Vec<OpenedFileEvent> {
+    std::mem::take(&mut *pending.files.lock().unwrap())
 }
 
 #[tauri::command]
-fn take_opened_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<String> {
+fn take_opened_files(state: tauri::State<'_, PendingOpenFiles>) -> Vec<OpenedFileEvent> {
     take_pending_opened_files(&state)
+}
+
+fn acknowledge_pending_opened_files(pending: &PendingOpenFiles, ids: &[u64]) {
+    pending
+        .files
+        .lock()
+        .unwrap()
+        .retain(|event| !ids.contains(&event.id));
+}
+
+#[tauri::command]
+fn ack_opened_files(state: tauri::State<'_, PendingOpenFiles>, ids: Vec<u64>) {
+    acknowledge_pending_opened_files(&state, &ids);
 }
 
 #[tauri::command]
@@ -95,10 +138,31 @@ mod tests {
     #[test]
     fn pending_opened_files_are_taken_once() {
         let pending = PendingOpenFiles::default();
-        pending.0.lock().unwrap().push("/tmp/launch.md".to_string());
+        let event = enqueue_pending_opened_file(&pending, "/tmp/launch.md".to_string());
 
-        assert_eq!(take_pending_opened_files(&pending), vec!["/tmp/launch.md"]);
+        assert_eq!(take_pending_opened_files(&pending), vec![event]);
         assert!(take_pending_opened_files(&pending).is_empty());
+    }
+
+    #[test]
+    fn distinct_same_path_events_have_distinct_ids() {
+        let pending = PendingOpenFiles::default();
+        let first = enqueue_pending_opened_file(&pending, "/tmp/same.md".to_string());
+        let second = enqueue_pending_opened_file(&pending, "/tmp/same.md".to_string());
+
+        assert_ne!(first.id, second.id);
+        assert_eq!(take_pending_opened_files(&pending), vec![first, second]);
+    }
+
+    #[test]
+    fn acknowledged_opened_files_are_removed_without_path_deduplication() {
+        let pending = PendingOpenFiles::default();
+        let first = enqueue_pending_opened_file(&pending, "/tmp/same.md".to_string());
+        let second = enqueue_pending_opened_file(&pending, "/tmp/same.md".to_string());
+
+        acknowledge_pending_opened_files(&pending, &[first.id]);
+
+        assert_eq!(take_pending_opened_files(&pending), vec![second]);
     }
 
     #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
@@ -140,6 +204,7 @@ mod settings_tests {
                 y: None,
                 maximized: None,
             },
+            split_ratio: 33.3333,
         };
         write_settings_to(&path, &settings).unwrap();
         let loaded = read_settings_from(&path)
@@ -150,6 +215,58 @@ mod settings_tests {
         assert_eq!(loaded.preview_font_size, 18);
         assert_eq!(loaded.window_state.width, 1000);
         assert_eq!(loaded.window_state.height, 700);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn settings_json_round_trip_preserves_split_ratio_with_camel_case_key() {
+        let dir = temp_settings_dir("settings-split-ratio-roundtrip");
+        let path = dir.join("settings.json");
+        let settings = Settings {
+            theme: "dark".to_string(),
+            editor_font_size: 16,
+            preview_font_size: 18,
+            window_state: WindowState {
+                width: 1000,
+                height: 700,
+                x: None,
+                y: None,
+                maximized: None,
+            },
+            split_ratio: 62.5,
+        };
+
+        write_settings_to(&path, &settings).unwrap();
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(value["splitRatio"], serde_json::json!(62.5));
+
+        let loaded = read_settings_from(&path)
+            .unwrap()
+            .expect("settings file should exist after write");
+        assert_eq!(loaded.split_ratio, 62.5);
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn legacy_settings_without_split_ratio_use_the_default() {
+        let dir = temp_settings_dir("settings-split-ratio-legacy");
+        let path = dir.join("settings.json");
+        let legacy = r#"
+        {
+          "theme": "light",
+          "editorFontSize": 14,
+          "previewFontSize": 16,
+          "windowState": { "width": 800, "height": 600 }
+        }
+        "#;
+        fs::write(&path, legacy).unwrap();
+
+        let loaded = read_settings_from(&path)
+            .unwrap()
+            .expect("legacy settings file should load");
+        assert_eq!(loaded.split_ratio, 33.3333);
         fs::remove_dir_all(&dir).ok();
     }
 
@@ -173,6 +290,7 @@ pub fn run() {
             load_settings,
             save_settings,
             take_opened_files,
+            ack_opened_files,
             commands::open_file,
             commands::read_file,
             commands::save_file,
@@ -188,14 +306,16 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, _event| {
         #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-        if let tauri::RunEvent::Opened { urls } = event {
+        if let tauri::RunEvent::Opened { urls } = _event {
             for path in opened_file_paths(urls) {
-                if let Some(pending) = app_handle.try_state::<PendingOpenFiles>() {
-                    pending.0.lock().unwrap().push(path.clone());
+                if let Some(pending) = _app_handle.try_state::<PendingOpenFiles>() {
+                    let event = enqueue_pending_opened_file(&pending, path);
+                    let _ = _app_handle.emit("open-file", event);
+                } else {
+                    let _ = _app_handle.emit("open-file", path);
                 }
-                let _ = app_handle.emit("open-file", path);
             }
         }
     });

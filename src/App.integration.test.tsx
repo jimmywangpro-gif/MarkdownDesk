@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import App from "./App";
 import { saveHtmlFile } from "./lib/exportHtml";
 import { printPdf } from "./lib/printPdf";
+
+const rangePrototype = Object.getPrototypeOf(document.createRange()) as object;
+if (!("getClientRects" in rangePrototype)) {
+  Object.defineProperty(rangePrototype, "getClientRects", {
+    configurable: true,
+    value: () => [],
+  });
+}
 
 const eventMocks = vi.hoisted(() => ({
   listen: vi.fn(),
@@ -54,6 +62,15 @@ const mockedInvoke = vi.mocked(invoke);
 const mockedOpenUrl = vi.mocked(openUrl);
 const mockedSaveHtmlFile = vi.mocked(saveHtmlFile);
 const mockedPrintPdf = vi.mocked(printPdf);
+
+async function setEditorText(editor: HTMLElement, value: string) {
+  await act(async () => {
+    editor.textContent = value;
+    fireEvent.input(editor, { inputType: "insertText", data: value });
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
 describe("App integration seams (T09)", () => {
   beforeEach(() => {
@@ -122,7 +139,7 @@ describe("App integration seams (T09)", () => {
     });
 
     await waitFor(() => {
-      expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe("# Dropped");
+      expect(screen.getByTestId("editor-input").textContent).toBe("# Dropped");
     });
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/dropped.md" });
   });
@@ -143,9 +160,7 @@ describe("App integration seams (T09)", () => {
     });
 
     await waitFor(() => {
-      expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe(
-        "# Native drop",
-      );
+      expect(screen.getByTestId("editor-input").textContent).toBe("# Native drop");
     });
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/native-drop.md" });
   });
@@ -164,15 +179,17 @@ describe("App integration seams (T09)", () => {
     eventMocks.openFileHandler?.({ payload: "/tmp/from-finder.md" });
 
     await waitFor(() => {
-      expect((screen.getByTestId("editor-input") as HTMLTextAreaElement).value).toBe("# Finder");
+      expect(screen.getByTestId("editor-input").textContent).toBe("# Finder");
     });
+    expect(screen.getByTestId("preview-pane").querySelector("h1")?.textContent).toBe("Finder");
+    expect(screen.getByTestId("file-status").textContent).toBe("/tmp/from-finder.md");
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/from-finder.md" });
   });
 
   it("routes preview external links to the system opener", async () => {
     render(<App />);
     const editor = screen.getByTestId("editor-input");
-    fireEvent.change(editor, { target: { value: "[Docs](https://example.com/docs)" } });
+    await setEditorText(editor, "[Docs](https://example.com/docs)");
 
     fireEvent.click(screen.getByRole("link", { name: "Docs" }));
 

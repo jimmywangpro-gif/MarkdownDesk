@@ -104,6 +104,10 @@ interface HastNode {
   tagName?: string;
   properties?: Record<string, unknown>;
   children?: HastNode[];
+  position?: {
+    start?: { line?: number };
+    end?: { line?: number };
+  };
 }
 
 // GFM align attribute value → styleable class name (T12 table polish).
@@ -144,6 +148,46 @@ function applyAlignmentClasses(node: HastNode): void {
     }
   }
   for (const child of node.children ?? []) applyAlignmentClasses(child);
+}
+
+export interface MarkdownTask {
+  line: number;
+  checked: boolean;
+}
+
+function annotateTasks(node: HastNode, tasks: MarkdownTask[]): void {
+  if (node.type === "element" && node.tagName === "li") {
+    const className = node.properties?.className;
+    const isTaskItem = Array.isArray(className)
+      ? className.includes("task-list-item")
+      : className === "task-list-item";
+    const input = (node.children ?? []).find(
+      (child) => child.type === "element" && child.tagName === "input",
+    );
+    const line = node.position?.start?.line;
+
+    if (
+      isTaskItem &&
+      input &&
+      typeof line === "number" &&
+      Number.isInteger(line) &&
+      line > 0
+    ) {
+      const inputProperties = input.properties ?? {};
+      const { type, ...rest } = inputProperties;
+      input.properties = {
+        ...(type === undefined ? {} : { type }),
+        "data-task-line": String(line),
+        "aria-label": `Toggle task on line ${line}`,
+        ...Object.fromEntries(
+          Object.entries(rest).filter(([key]) => key !== "disabled"),
+        ),
+      };
+      tasks.push({ line, checked: inputProperties.checked === true });
+    }
+  }
+
+  for (const child of node.children ?? []) annotateTasks(child, tasks);
 }
 
 function stringifyHast(node: HastNode): string {
@@ -203,6 +247,8 @@ export function renderMarkdown(source: string): string {
 //   - a `data-block-index` attribute on every top-level block element, and
 //   - a `blocks` array mapping each block index to the 1-based source line
 //     where the block starts.
+//   - a `data-task-line` attribute on every rendered task checkbox, and
+//   - a `tasks` array mapping each task checkbox to its source line and state.
 //
 // The editor caret line can then be mapped to a block via the largest
 // startLine <= caretLine, and the preview scrolled to that block's element.
@@ -218,6 +264,7 @@ export interface MarkdownBlock {
 export interface MarkdownBlocksResult {
   html: string;
   blocks: MarkdownBlock[];
+  tasks: MarkdownTask[];
 }
 
 export function renderMarkdownBlocks(source: string): MarkdownBlocksResult {
@@ -227,6 +274,8 @@ export function renderMarkdownBlocks(source: string): MarkdownBlocksResult {
   applyAlignmentClasses(result);
 
   const blocks: MarkdownBlock[] = [];
+  const tasks: MarkdownTask[] = [];
+  annotateTasks(result, tasks);
   const children = result.children ?? [];
   let line = 1;
   let blockIndex = 0;
@@ -253,5 +302,5 @@ export function renderMarkdownBlocks(source: string): MarkdownBlocksResult {
     children: children.map(wrapTable),
   };
 
-  return { html: stringifyHast(polished), blocks };
+  return { html: stringifyHast(polished), blocks, tasks };
 }

@@ -27,6 +27,10 @@
     color: #000 !important;
   }
 
+  .title-bar {
+    display: none !important;
+  }
+
   .toolbar {
     display: none !important;
   }
@@ -38,6 +42,7 @@
   }
 
   .editor-pane,
+  .editor-host,
   .editor-input {
     display: none !important;
   }

@@ -20,6 +20,29 @@ const config = JSON.parse(
   };
 };
 
+const capability = JSON.parse(
+  readFileSync("src-tauri/capabilities/default.json", "utf8"),
+) as {
+  permissions?: Array<
+    | string
+    | {
+        identifier: string;
+        allow?: Array<{ url: string }>;
+      }
+  >;
+};
+
+const WINDOW_STATE_PERMISSIONS = [
+  "core:window:allow-set-size",
+  "core:window:allow-set-position",
+  "core:window:allow-available-monitors",
+  "core:window:allow-outer-size",
+  "core:window:allow-outer-position",
+  "core:window:allow-is-maximized",
+  "core:window:allow-maximize",
+  "core:window:allow-unmaximize",
+] as const;
+
 function cspDirectives(): Record<string, string> {
   return Object.fromEntries(
     (config.app?.security?.csp ?? "").split(";").map((directive) => {
@@ -37,6 +60,19 @@ describe("Tauri CSP", () => {
     expect(directives["connect-src"]).toContain("ipc: http://ipc.localhost");
     expect(directives["img-src"]).toContain("data: asset: http://asset.localhost");
   });
+
+  it("keeps executable and document-embedding capabilities explicitly locked down", () => {
+    const directives = cspDirectives();
+    const policy = config.app?.security?.csp ?? "";
+
+    expect(directives["default-src"]).toBe("'self'");
+    expect(directives["script-src"]).toBe("'self'");
+    expect(directives["style-src"]).toBe("'self'");
+    expect(directives["object-src"]).toBe("'none'");
+    expect(directives["base-uri"]).toBe("'none'");
+    expect(directives["form-action"]).toBe("'none'");
+    expect(policy).not.toMatch(/'unsafe-(?:inline|eval)'/);
+  });
 });
 
 describe("Tauri file associations", () => {
@@ -51,6 +87,32 @@ describe("Tauri file associations", () => {
       role: "Editor",
       rank: "Default",
       mimeType: "text/markdown",
+    });
+  });
+});
+
+describe("Tauri window capabilities", () => {
+  it("allows only the window state commands needed by useWindowState", () => {
+    const permissions = capability.permissions ?? [];
+    const identifiers = permissions.map((permission) =>
+      typeof permission === "string" ? permission : permission.identifier,
+    );
+    const windowPermissions = identifiers.filter((identifier) =>
+      identifier.startsWith("core:window:"),
+    );
+
+    expect(identifiers).toContain("core:default");
+    expect(windowPermissions).toEqual(WINDOW_STATE_PERMISSIONS);
+    expect(identifiers).not.toContain("core:window:default");
+    expect(identifiers).not.toContain("core:window:allow-all");
+
+    expect(permissions).toContainEqual({
+      identifier: "opener:allow-open-url",
+      allow: [
+        { url: "http://*" },
+        { url: "https://*" },
+        { url: "mailto:*" },
+      ],
     });
   });
 });

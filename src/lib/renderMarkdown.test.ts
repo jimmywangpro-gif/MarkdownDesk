@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { renderMarkdown } from "./renderMarkdown";
+import { renderMarkdown, renderMarkdownBlocks } from "./renderMarkdown";
 
 // T01 tracer-bullet golden tests（最小管線）。
 // 完整 GFM golden 套件屬 T02；此處僅鎖定最小行為與安全基線。
@@ -159,5 +159,63 @@ describe("renderMarkdown (T02 sanitize)", () => {
     expect(renderMarkdown("[ok](https://example.com)")).toBe(
       '<p><a href="https://example.com">ok</a></p>'
     );
+  });
+});
+
+// Task renderer contract: metadata and control identifiers are derived from
+// the parsed source position, while the existing sanitize guarantees remain.
+describe("renderMarkdownBlocks task metadata contract", () => {
+  it("maps top-level and nested tasks to source lines and checked state", () => {
+    const result = renderMarkdownBlocks(
+      "intro\n\n- [ ] top todo\n  - [x] nested done\n  - [ ] nested todo\n- [x] second top",
+    );
+
+    expect(result.tasks).toEqual([
+      { line: 3, checked: false },
+      { line: 4, checked: true },
+      { line: 5, checked: false },
+      { line: 6, checked: true },
+    ]);
+    expect(result.html).toContain(
+      '<input type="checkbox" data-task-line="3" aria-label="Toggle task on line 3">',
+    );
+    expect(result.html).toContain(
+      '<input type="checkbox" data-task-line="4" aria-label="Toggle task on line 4" checked>',
+    );
+    expect(result.html).toContain(
+      '<input type="checkbox" data-task-line="6" aria-label="Toggle task on line 6" checked>',
+    );
+    expect(result.html).not.toContain("disabled");
+    expect(result.html.match(/data-task-line="/g)).toHaveLength(4);
+  });
+
+  it("emits focusable labelled controls without copying task text into attributes", () => {
+    const result = renderMarkdownBlocks(
+      '- [ ] <img src="x" onerror="alert(1)"> & "quoted"',
+    );
+    const container = document.createElement("div");
+    container.innerHTML = result.html;
+
+    const checkbox = container.querySelector<HTMLInputElement>(
+      'input[data-task-line="1"]',
+    );
+    expect(checkbox).not.toBeNull();
+    expect(checkbox?.disabled).toBe(false);
+    expect(checkbox?.getAttribute("aria-label")).toBe("Toggle task on line 1");
+    expect(result.html).not.toContain("<img");
+    expect(result.html).not.toContain("onerror=");
+    expect(result.html).not.toContain('aria-label="<');
+  });
+
+  it("keeps task identifiers generated and sanitizer-safe", () => {
+    const result = renderMarkdownBlocks(
+      '- [ ] <img src="x" onerror="alert(1)">\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))',
+    );
+
+    expect(result.tasks).toEqual([{ line: 1, checked: false }]);
+    expect(result.html).not.toMatch(/<script\b/i);
+    expect(result.html).not.toContain("onerror=");
+    expect(result.html).not.toContain("javascript:");
+    expect(result.html).not.toMatch(/data-task-line="[^0-9]/);
   });
 });

@@ -1,6 +1,12 @@
 use std::collections::HashMap;
 use std::fs;
+#[cfg(target_os = "macos")]
+use std::fs::OpenOptions;
+#[cfg(target_os = "macos")]
+use std::io::Write;
 use std::path::{Path, PathBuf};
+#[cfg(target_os = "macos")]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::UNIX_EPOCH;
 
@@ -42,7 +48,18 @@ fn mtime_millis(path: &Path) -> Result<u64, String> {
         .map_err(|e| format!("讀取修改時間失敗: {e}"))?;
     modified
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
+        .map(|d| {
+            #[cfg(target_os = "macos")]
+            {
+                // Keep the version within JavaScript's safe integer range while
+                // avoiding millisecond collisions between rapid file changes.
+                d.as_micros() as u64
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                d.as_millis() as u64
+            }
+        })
         .map_err(|e| format!("修改時間無效: {e}"))
 }
 
@@ -56,8 +73,59 @@ pub fn read_file_at(path: &Path) -> Result<OpenedFile, String> {
     })
 }
 
+#[cfg(target_os = "macos")]
+static TEMP_FILE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(target_os = "macos")]
+fn write_file_atomically(path: &Path, content: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| "寫入檔案失敗: 無效檔案路徑".to_string())?;
+    let nonce = TEMP_FILE_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    for attempt in 0..100 {
+        let temporary = parent.join(format!(
+            ".{}.markdowndesk-{}-{nonce}-{attempt}.tmp",
+            file_name.to_string_lossy(),
+            std::process::id(),
+        ));
+        let mut file = match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("寫入檔案失敗: {error}")),
+        };
+
+        let result = (|| {
+            file.write_all(content.as_bytes())
+                .map_err(|error| format!("寫入檔案失敗: {error}"))?;
+            file.sync_all()
+                .map_err(|error| format!("寫入檔案失敗: {error}"))?;
+            drop(file);
+            fs::rename(&temporary, path).map_err(|error| format!("寫入檔案失敗: {error}"))
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&temporary);
+        }
+        return result;
+    }
+
+    Err("寫入檔案失敗: 建立暫存檔失敗".to_string())
+}
+
 pub fn write_file_at(path: &Path, content: &str) -> Result<SavedFile, String> {
+    #[cfg(target_os = "macos")]
+    write_file_atomically(path, content)?;
+    #[cfg(not(target_os = "macos"))]
     fs::write(path, content).map_err(|e| format!("寫入檔案失敗: {e}"))?;
+
     let mtime = mtime_millis(path)?;
     Ok(SavedFile {
         path: path.to_string_lossy().to_string(),
@@ -100,12 +168,32 @@ fn recent_files_clear_at(data_dir: &Path) -> Result<(), String> {
     recent_files_save(data_dir, &[])
 }
 
-fn is_external_modify(event: &Event, watched: &Path) -> bool {
-    matches!(event.kind, EventKind::Modify(_)) && event.paths.iter().any(|p| p == watched)
+fn is_external_change(event: &Event, watched: &Path) -> bool {
+    matches!(
+        event.kind,
+        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Remove(_)
+    ) && event
+        .paths
+        .iter()
+        .any(|path| canonical_or_self(path) == watched)
 }
 
 fn canonical_or_self(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+#[cfg(target_os = "macos")]
+fn watcher_path(path: &Path) -> PathBuf {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    canonical_or_self(parent)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn watcher_path(path: &Path) -> PathBuf {
+    path.to_path_buf()
 }
 
 fn spawn_watcher(
@@ -116,14 +204,14 @@ fn spawn_watcher(
     let emit_path = path.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
         if let Ok(event) = res {
-            if is_external_modify(&event, &watched) {
+            if is_external_change(&event, &watched) {
                 on_change(emit_path.clone());
             }
         }
     })
     .map_err(|e| format!("建立檔案監看失敗: {e}"))?;
     watcher
-        .watch(&path, notify::RecursiveMode::NonRecursive)
+        .watch(&watcher_path(&path), notify::RecursiveMode::NonRecursive)
         .map_err(|e| format!("監看檔案失敗: {e}"))?;
     Ok(watcher)
 }
@@ -157,8 +245,13 @@ pub fn read_file(path: String) -> Result<OpenedFile, String> {
 }
 
 #[tauri::command]
-pub fn save_file(path: String, content: String) -> Result<SavedFile, String> {
-    write_file_at(Path::new(&path), &content)
+pub fn save_file(path: String, content: String, expected_mtime: u64) -> Result<SavedFile, String> {
+    let path = Path::new(&path);
+    let actual_mtime = mtime_millis(path)?;
+    if actual_mtime != expected_mtime {
+        return Err("檔案已在載入後被外部修改，請重新載入後再儲存".to_string());
+    }
+    write_file_at(path, &content)
 }
 
 #[tauri::command]
@@ -200,6 +293,11 @@ pub fn recent_files_clear(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn watch_file(app: AppHandle, path: String) -> Result<(), String> {
     let watched = PathBuf::from(&path);
+    let key = canonical_or_self(&watched);
+    let mut active_watchers = watchers().lock().unwrap();
+    if active_watchers.contains_key(&key) {
+        return Ok(());
+    }
     let watcher = spawn_watcher(watched.clone(), move |changed| {
         let _ = app.emit(
             "file-changed",
@@ -208,10 +306,7 @@ pub fn watch_file(app: AppHandle, path: String) -> Result<(), String> {
             },
         );
     })?;
-    watchers()
-        .lock()
-        .unwrap()
-        .insert(canonical_or_self(&watched), watcher);
+    active_watchers.insert(key, watcher);
     Ok(())
 }
 
@@ -307,29 +402,45 @@ mod tests {
     }
 
     #[test]
-    fn is_external_modify_filters_events() {
+    fn is_external_change_filters_events() {
         let watched = Path::new("/tmp/note.md");
         let modify = Event::new(EventKind::Modify(notify::event::ModifyKind::Data(
             notify::event::DataChange::Any,
         )))
         .add_path(watched.to_path_buf());
-        assert!(is_external_modify(&modify, watched));
+        assert!(is_external_change(&modify, watched));
 
         let access = Event::new(EventKind::Access(notify::event::AccessKind::Close(
             notify::event::AccessMode::Any,
         )))
         .add_path(watched.to_path_buf());
-        assert!(!is_external_modify(&access, watched));
+        assert!(!is_external_change(&access, watched));
 
         let create = Event::new(EventKind::Create(notify::event::CreateKind::File))
             .add_path(watched.to_path_buf());
-        assert!(!is_external_modify(&create, watched));
+        assert!(is_external_change(&create, watched));
+
+        let remove = Event::new(EventKind::Remove(notify::event::RemoveKind::File))
+            .add_path(watched.to_path_buf());
+        assert!(is_external_change(&remove, watched));
 
         let other_path = Event::new(EventKind::Modify(notify::event::ModifyKind::Data(
             notify::event::DataChange::Any,
         )))
         .add_path(PathBuf::from("/tmp/other.md"));
-        assert!(!is_external_modify(&other_path, watched));
+        assert!(!is_external_change(&other_path, watched));
+    }
+
+    #[test]
+    fn is_external_change_classifies_replacement_events_for_watched_path() {
+        let watched = Path::new("/tmp/note.md");
+        let replacement_remove = Event::new(EventKind::Remove(notify::event::RemoveKind::Any))
+            .add_path(watched.to_path_buf());
+        let replacement_create = Event::new(EventKind::Create(notify::event::CreateKind::Any))
+            .add_path(watched.to_path_buf());
+
+        assert!(is_external_change(&replacement_remove, watched));
+        assert!(is_external_change(&replacement_create, watched));
     }
 
     #[test]
