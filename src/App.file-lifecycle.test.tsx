@@ -224,6 +224,47 @@ describe("App file lifecycle remediation", () => {
     expect(fileOpsMocks.readFile).toHaveBeenCalledTimes(2);
   });
 
+  it("loads the latest external change that arrives during an in-flight reload", async () => {
+    let resolveFirstExternalRead!: (file: ReturnType<typeof openedFile>) => void;
+    const firstExternalRead = new Promise<ReturnType<typeof openedFile>>((resolve) => {
+      resolveFirstExternalRead = resolve;
+    });
+
+    fileOpsMocks.readFile
+      .mockResolvedValueOnce(openedFile("/tmp/live.md", "# Live", 10))
+      .mockImplementationOnce(() => firstExternalRead)
+      .mockResolvedValueOnce(openedFile("/tmp/live.md", "# Latest external", 12));
+    render(<App />);
+    await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
+    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+
+    await act(async () => {
+      fileOpsMocks.fileChangedHandler?.("/tmp/live.md");
+      await Promise.resolve();
+    });
+    expect(fileOpsMocks.readFile).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      fileOpsMocks.fileChangedHandler?.("/tmp/live.md");
+      resolveFirstExternalRead(openedFile("/tmp/live.md", "# First external", 11));
+      await firstExternalRead;
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("editor-input").textContent).toBe("# Latest external"),
+    );
+    expect(fileOpsMocks.readFile).toHaveBeenCalledTimes(3);
+
+    fireEvent.click(screen.getByTestId("save-button"));
+    await waitFor(() =>
+      expect(fileOpsMocks.saveFile).toHaveBeenCalledWith(
+        "/tmp/live.md",
+        "# Latest external",
+        12,
+      ),
+    );
+  });
+
   it("retires the active watcher when the file lifecycle unmounts", async () => {
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
     const view = render(<App />);

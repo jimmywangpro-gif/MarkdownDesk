@@ -114,6 +114,8 @@ function App() {
   const fileMtimeRef = useRef<number | null>(null);
   const watchedPathRef = useRef<string | null>(null);
   const externalReloadInFlightRef = useRef(false);
+  const externalReloadPendingPathRef = useRef<string | null>(null);
+  const externalReloadScheduledPathRef = useRef<string | null>(null);
 
   const reportWindowStateError = useCallback((message: string) => {
     setOperationStatus(message);
@@ -324,14 +326,17 @@ function App() {
 
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
-    void onFileChanged((path) => {
-      if (path !== filePathRef.current || externalReloadInFlightRef.current) return;
+
+    function reloadExternalFile(path: string): void {
       externalReloadInFlightRef.current = true;
       readFile(path)
         .then((file) => {
           if (path !== filePathRef.current) return;
           if (file.mtime === fileMtimeRef.current) return;
-          if (window.confirm("檔案已在外部被修改，是否重新載入？")) {
+          if (
+            externalReloadPendingPathRef.current !== path &&
+            window.confirm("檔案已在外部被修改，是否重新載入？")
+          ) {
             applyFile(file);
             setOperationStatus(null);
           }
@@ -343,7 +348,28 @@ function App() {
         })
         .finally(() => {
           externalReloadInFlightRef.current = false;
+          const pendingPath = externalReloadPendingPathRef.current;
+          externalReloadPendingPathRef.current = null;
+          if (pendingPath !== null && pendingPath === filePathRef.current) {
+            reloadExternalFile(pendingPath);
+          }
         });
+    }
+
+    void onFileChanged((path) => {
+      if (path !== filePathRef.current) return;
+      if (externalReloadInFlightRef.current) {
+        externalReloadPendingPathRef.current = path;
+        return;
+      }
+      if (externalReloadScheduledPathRef.current !== null) return;
+      externalReloadScheduledPathRef.current = path;
+      queueMicrotask(() => {
+        externalReloadScheduledPathRef.current = null;
+        if (path === filePathRef.current && !externalReloadInFlightRef.current) {
+          reloadExternalFile(path);
+        }
+      });
     }).then((fn) => {
       unlisten = fn;
     }).catch((error) => {
