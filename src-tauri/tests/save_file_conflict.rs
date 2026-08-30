@@ -1,5 +1,6 @@
 #![cfg(target_os = "macos")]
 
+#[allow(dead_code)]
 mod save_seam {
     include!("../src/commands.rs");
 }
