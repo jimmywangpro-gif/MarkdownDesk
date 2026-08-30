@@ -23,6 +23,7 @@ const windowMocks = vi.hoisted(() => {
 
   return {
     currentWindow,
+    availableMonitors: vi.fn(),
     getCurrentWindow: vi.fn(() => currentWindow),
     resizedHandler: undefined as WindowEventHandler<{ width: number; height: number }> | undefined,
     movedHandler: undefined as WindowEventHandler<{ x: number; y: number }> | undefined,
@@ -35,6 +36,7 @@ const windowMocks = vi.hoisted(() => {
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: windowMocks.getCurrentWindow,
+  availableMonitors: windowMocks.availableMonitors,
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -106,6 +108,18 @@ describe("window state and native close guard", () => {
     windowMocks.currentWindow.outerSize.mockReset().mockResolvedValue({ width: 1400, height: 800 });
     windowMocks.currentWindow.outerPosition.mockReset().mockResolvedValue({ x: -20, y: 40 });
     windowMocks.currentWindow.isMaximized.mockReset().mockResolvedValue(false);
+    windowMocks.availableMonitors.mockReset().mockResolvedValue([
+      {
+        name: "Default Display",
+        size: { width: 2560, height: 1600 },
+        position: { x: 0, y: 0 },
+        workArea: {
+          position: { x: -2000, y: -1000 },
+          size: { width: 4000, height: 3000 },
+        },
+        scaleFactor: 1,
+      },
+    ]);
     windowMocks.currentWindow.setSize.mockReset().mockResolvedValue(undefined);
     windowMocks.currentWindow.setPosition.mockReset().mockResolvedValue(undefined);
     windowMocks.currentWindow.maximize.mockReset().mockResolvedValue(undefined);
@@ -146,6 +160,79 @@ describe("window state and native close guard", () => {
     );
     expect(windowMocks.currentWindow.maximize).toHaveBeenCalledOnce();
     expect(screen.getByTestId("editor-input")).toBeTruthy();
+  });
+
+  it("moves an off-screen saved position into the monitor work area while preserving size and maximized state", async () => {
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "load_settings") {
+        return {
+          windowState: {
+            width: 1280,
+            height: 720,
+            x: -2000,
+            y: -1500,
+            maximized: true,
+          },
+        };
+      }
+      if (command === "recent_files_list") return [];
+      return undefined;
+    });
+    windowMocks.availableMonitors.mockResolvedValue([
+      {
+        name: "Built-in Display",
+        size: { width: 2560, height: 1600 },
+        position: { x: 0, y: 0 },
+        workArea: {
+          position: { x: 0, y: 24 },
+          size: { width: 1440, height: 876 },
+        },
+        scaleFactor: 2,
+      },
+    ]);
+
+    renderApp();
+    await waitFor(() => expect(windowMocks.currentWindow.setSize).toHaveBeenCalledOnce());
+
+    expect(windowMocks.availableMonitors).toHaveBeenCalledOnce();
+    expect(windowMocks.currentWindow.setSize).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "Physical", width: 1280, height: 720 }),
+    );
+    expect(windowMocks.currentWindow.setPosition).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "Physical", x: 0, y: 24 }),
+    );
+    expect(windowMocks.currentWindow.unmaximize).not.toHaveBeenCalled();
+    expect(windowMocks.currentWindow.maximize).toHaveBeenCalledOnce();
+  });
+
+  it("keeps valid geometry safe when no monitor information is available", async () => {
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "load_settings") {
+        return {
+          windowState: {
+            width: 1024,
+            height: 768,
+            x: -3000,
+            y: -2000,
+            maximized: false,
+          },
+        };
+      }
+      if (command === "recent_files_list") return [];
+      return undefined;
+    });
+    windowMocks.availableMonitors.mockResolvedValue([]);
+
+    renderApp();
+    await waitFor(() => expect(windowMocks.currentWindow.setSize).toHaveBeenCalledOnce());
+
+    expect(windowMocks.availableMonitors).toHaveBeenCalledOnce();
+    expect(windowMocks.currentWindow.setSize).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "Physical", width: 1024, height: 768 }),
+    );
+    expect(windowMocks.currentWindow.setPosition).not.toHaveBeenCalled();
+    expect(windowMocks.currentWindow.unmaximize).toHaveBeenCalledOnce();
+    expect(windowMocks.currentWindow.maximize).not.toHaveBeenCalled();
   });
 
   it("reports restore failures without blocking the editor", async () => {

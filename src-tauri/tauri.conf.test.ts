@@ -35,6 +35,7 @@ const capability = JSON.parse(
 const WINDOW_STATE_PERMISSIONS = [
   "core:window:allow-set-size",
   "core:window:allow-set-position",
+  "core:window:allow-available-monitors",
   "core:window:allow-outer-size",
   "core:window:allow-outer-position",
   "core:window:allow-is-maximized",

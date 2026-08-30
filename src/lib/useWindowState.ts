@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
-import { getCurrentWindow, type Window } from "@tauri-apps/api/window";
+import { availableMonitors, getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { saveSettings, type Settings, type WindowState } from "./settings";
 
@@ -59,7 +59,28 @@ async function restoreWindow(window: Window, state: WindowState): Promise<void> 
   const x = validPosition(state.x);
   const y = validPosition(state.y);
   if (x !== null && y !== null) {
-    await window.setPosition(new PhysicalPosition(x, y));
+    let monitors: Awaited<ReturnType<typeof availableMonitors>> = [];
+    try {
+      monitors = await availableMonitors();
+    } catch {
+      // Keep the native default position when monitor information is unavailable.
+    }
+
+    const monitor = monitors.find(({ workArea }) => {
+      const left = workArea.position.x;
+      const top = workArea.position.y;
+      const right = left + workArea.size.width;
+      const bottom = top + workArea.size.height;
+      return x >= left && x < right && y >= top && y < bottom;
+    });
+    const position = monitor === undefined ? monitors[0]?.workArea.position : { x, y };
+    if (position !== undefined) {
+      const safeX = validPosition(position.x);
+      const safeY = validPosition(position.y);
+      if (safeX !== null && safeY !== null) {
+        await window.setPosition(new PhysicalPosition(safeX, safeY));
+      }
+    }
   }
 
   if (state.maximized === true) await window.maximize();
