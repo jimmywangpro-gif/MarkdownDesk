@@ -109,6 +109,7 @@ function App() {
   const filePathRef = useRef<string | null>(null);
   const fileMtimeRef = useRef<number | null>(null);
   const watchedPathRef = useRef<string | null>(null);
+  const externalReloadInFlightRef = useRef(false);
 
   const reportWindowStateError = useCallback((message: string) => {
     setOperationStatus(message);
@@ -314,7 +315,8 @@ function App() {
   useEffect(() => {
     let unlisten: UnlistenFn | undefined;
     void onFileChanged((path) => {
-      if (path !== filePathRef.current) return;
+      if (path !== filePathRef.current || externalReloadInFlightRef.current) return;
+      externalReloadInFlightRef.current = true;
       readFile(path)
         .then((file) => {
           if (path !== filePathRef.current) return;
@@ -328,6 +330,9 @@ function App() {
           if (path === filePathRef.current) {
             setOperationStatus(operationError("外部檔案重新載入失敗", error));
           }
+        })
+        .finally(() => {
+          externalReloadInFlightRef.current = false;
         });
     }).then((fn) => {
       unlisten = fn;

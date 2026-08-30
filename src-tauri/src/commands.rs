@@ -182,6 +182,19 @@ fn canonical_or_self(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
 }
 
+#[cfg(target_os = "macos")]
+fn watcher_path(path: &Path) -> PathBuf {
+    path.parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn watcher_path(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
 fn spawn_watcher(
     path: PathBuf,
     on_change: impl Fn(PathBuf) + Send + 'static,
@@ -197,7 +210,7 @@ fn spawn_watcher(
     })
     .map_err(|e| format!("建立檔案監看失敗: {e}"))?;
     watcher
-        .watch(&path, notify::RecursiveMode::NonRecursive)
+        .watch(&watcher_path(&path), notify::RecursiveMode::NonRecursive)
         .map_err(|e| format!("監看檔案失敗: {e}"))?;
     Ok(watcher)
 }

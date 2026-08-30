@@ -203,6 +203,39 @@ describe("App file lifecycle remediation", () => {
     expect(screen.getByTestId("preview-pane").textContent).toContain("edited before external failure");
   });
 
+  it("coalesces an external-save event burst into one reload notification", async () => {
+    fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
+    render(<App />);
+    await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
+    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+
+    fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# External", 11));
+    await act(async () => {
+      fileOpsMocks.fileChangedHandler?.("/tmp/live.md");
+      fileOpsMocks.fileChangedHandler?.("/tmp/live.md");
+      fileOpsMocks.fileChangedHandler?.("/tmp/live.md");
+      await Promise.resolve();
+    });
+
+    await waitFor(() =>
+      expect(window.confirm).toHaveBeenCalledWith("檔案已在外部被修改，是否重新載入？"),
+    );
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(fileOpsMocks.readFile).toHaveBeenCalledTimes(2);
+  });
+
+  it("retires the active watcher when the file lifecycle unmounts", async () => {
+    fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
+    const view = render(<App />);
+    await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
+    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+
+    view.unmount();
+
+    expect(fileOpsMocks.unwatchFile).toHaveBeenCalledOnce();
+    expect(fileOpsMocks.unwatchFile).toHaveBeenCalledWith("/tmp/live.md");
+  });
+
   it("updates the mtime boundary before an own-save watcher event can prompt", async () => {
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
     fileOpsMocks.saveFile.mockResolvedValue({ path: "/tmp/live.md", mtime: 20 });
