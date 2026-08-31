@@ -107,6 +107,34 @@ npm run package -- --dry-run
 
 此 pipeline 不做簽章。15 MiB 是 package-file 的 guard；只有實際量測並寫入 manifest 的 package file 才能標示 `VERIFIED`，不能把它解讀成已安裝 footprint。
 
+### Optional future macOS signed release（release operator）
+
+MarkdownDesk 目前定位為本機自用，`npm run package` 產生的 unsigned DMG 是目前交付路徑。下列 command 是為未來公開 macOS 散布保留的選項，並非自用的必要前置；它只可在 macOS 執行：
+
+```sh
+npm run package:macos:release
+```
+
+執行前，release operator 必須在本機 Keychain 安裝 **Developer ID Application** identity，並建立不寫入 repository 的 `notarytool` Keychain profile。shell 只提供 identity 與 profile 的名稱；不要將憑證、App-specific password、API key 或 profile credential 寫入 `.env`、CI log 或 source：
+
+```sh
+export APPLE_SIGNING_IDENTITY='Developer ID Application: <identity>'
+export MACOS_NOTARY_PROFILE='<keychain-profile-name>'
+npm run package:macos:release
+```
+
+release command 會拒絕缺少任一設定，且不會回退到 `--no-sign`。成功路徑會驗證 app signature、提交 DMG 到 `notarytool`、staple / validate ticket，並評估 app executable 與 DMG 的 Gatekeeper policy。只驗證設定而不產生 artifact 時可執行：
+
+```sh
+APPLE_SIGNING_IDENTITY='<placeholder>' MACOS_NOTARY_PROFILE='<placeholder>' \
+  npm run package:macos:release -- --dry-run
+```
+
+dry-run 一律輸出 `UNVERIFIED`，不是 signing、notarization 或 Gatekeeper 成功證據。流程依據 Tauri v2 macOS signing 文件與 Apple notarization 文件：
+
+- https://v2.tauri.app/distribute/sign/macos/
+- https://developer.apple.com/documentation/xcode/notarizing_macos_software_before_distribution
+
 ## 安裝已產生的套件
 
 以下步驟只適用於 `npm run package` 成功後，在對應 bundle 目錄找到的實際檔案：

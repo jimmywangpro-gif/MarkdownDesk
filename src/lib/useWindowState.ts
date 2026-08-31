@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { availableMonitors, getCurrentWindow, type Window } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import { saveSettings, type Settings, type WindowState } from "./settings";
 
 const SAVE_DEBOUNCE_MS = 200;
@@ -235,9 +236,20 @@ export function useWindowState({
     };
 
     const onCloseRequested = async (event: { preventDefault: () => void }) => {
-      if (dirtyRef.current && !window.confirm("目前有未儲存的變更，確定要關閉視窗嗎？")) {
-        event.preventDefault();
-        return;
+      const dirtyClose = dirtyRef.current;
+      if (dirtyClose) {
+        let confirmed: boolean;
+        try {
+          confirmed = await confirm("目前有未儲存的變更，確定要關閉視窗嗎？");
+        } catch (error) {
+          reportError("關閉視窗確認失敗", error);
+          event.preventDefault();
+          return;
+        }
+        if (!confirmed) {
+          event.preventDefault();
+          return;
+        }
       }
 
       if (saveTimer !== null) {
@@ -245,8 +257,9 @@ export function useWindowState({
         saveTimer = null;
       }
 
-      const next = latestNativeStateRef.current ?? windowStateRef.current;
-      await saveSettings({ ...settingsRef.current, windowState: next });
+      const next = { ...(latestNativeStateRef.current ?? windowStateRef.current) };
+      const savePromise = saveSettings({ ...settingsRef.current, windowState: next });
+      void savePromise.catch(() => {});
     };
 
     const setup = async () => {

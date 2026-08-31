@@ -16,14 +16,20 @@ if (!("getClientRects" in rangePrototype)) {
 
 async function setEditorText(editor: HTMLElement, value: string) {
   await act(async () => {
-    editor.textContent = value;
-    fireEvent.input(editor, { inputType: "insertText", data: value });
+    if (editor instanceof HTMLTextAreaElement) {
+      fireEvent.change(editor, { target: { value } });
+    } else {
+      editor.textContent = value;
+      fireEvent.input(editor, { inputType: "insertText", data: value });
+    }
     await Promise.resolve();
     await Promise.resolve();
   });
 }
 
 function editorSource(editor: HTMLElement): string {
+  if (editor instanceof HTMLTextAreaElement) return editor.value;
+
   return Array.from(editor.querySelectorAll(".cm-line"))
     .map((line) => line.textContent ?? "")
     .join("\n");

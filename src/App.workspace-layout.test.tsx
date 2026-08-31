@@ -106,12 +106,13 @@ describe("R09 workspace layout and accessibility", () => {
     expect(divider.getAttribute("tabindex")).toBe("0");
   });
 
-  it("gives the CodeMirror content surface the Markdown editor accessible name", () => {
+  it("gives the native textarea the Markdown editor accessible name", () => {
     render(<App />);
 
     const editor = screen.getByRole("textbox", { name: "Markdown editor" });
-    expect(editor.getAttribute("contenteditable")).toBe("true");
-    expect(editor.classList.contains("cm-content")).toBe(true);
+    expect(editor).toBeInstanceOf(HTMLTextAreaElement);
+    expect(editor.getAttribute("contenteditable")).toBeNull();
+    expect(editor.classList.contains("cm-content")).toBe(false);
   });
 
   it("keeps the toolbar in one row and horizontally scrollable at narrow widths", () => {

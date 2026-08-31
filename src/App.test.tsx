@@ -18,8 +18,12 @@ if (!("getClientRects" in rangePrototype)) {
 
 async function setEditorText(editor: HTMLElement, value: string) {
   await act(async () => {
-    editor.textContent = value;
-    fireEvent.input(editor, { inputType: "insertText", data: value });
+    if (editor instanceof HTMLTextAreaElement) {
+      fireEvent.change(editor, { target: { value } });
+    } else {
+      editor.textContent = value;
+      fireEvent.input(editor, { inputType: "insertText", data: value });
+    }
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -32,10 +36,11 @@ describe("MarkdownDesk App (T01 tracer bullet)", () => {
     expect(screen.getByTestId("preview-pane")).toBeTruthy();
   });
 
-  it("renders an accessible CodeMirror contenteditable editor", () => {
+  it("renders an accessible native textarea editor", () => {
     render(<App />);
     const editor = screen.getByRole("textbox", { name: "Markdown editor" });
-    expect(editor.getAttribute("contenteditable")).toBe("true");
+    expect(editor).toBeInstanceOf(HTMLTextAreaElement);
+    expect(editor.getAttribute("contenteditable")).toBeNull();
     expect(editor.getAttribute("data-testid")).toBe("editor-input");
   });
 
@@ -57,7 +62,7 @@ describe("MarkdownDesk App (T01 tracer bullet)", () => {
     expect(preview.querySelector("p")?.textContent).toBe("hello world");
   });
 
-  it("keeps Cmd/Ctrl+S working while the contenteditable has focus", async () => {
+  it("keeps Cmd/Ctrl+S working while the editor has focus", async () => {
     render(<App />);
     vi.mocked(invoke).mockClear();
     const editor = screen.getByTestId("editor-input");

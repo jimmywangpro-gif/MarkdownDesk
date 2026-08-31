@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+} from "react";
 import { renderMarkdownBlocks } from "./lib/renderMarkdown";
 import { toggleTaskLine } from "./lib/taskEditing";
 import { useSettings } from "./lib/SettingsContext";
@@ -29,7 +36,6 @@ import {
 import { useSyncScroll } from "./lib/useSyncScroll";
 import { useSplitRatio } from "./lib/useSplitRatio";
 import { useWindowState } from "./lib/useWindowState";
-import { MarkdownEditor } from "./components/MarkdownEditor";
 import {
   EditIcon,
   EyeIcon,
@@ -109,7 +115,6 @@ function App() {
   const [dirty, setDirty] = useState(false);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const [operationStatus, setOperationStatus] = useState<string | null>(null);
-  const [cursorOffset, setCursorOffset] = useState(0);
   const filePathRef = useRef<string | null>(null);
   const fileMtimeRef = useRef<number | null>(null);
   const watchedPathRef = useRef<string | null>(null);
@@ -432,6 +437,7 @@ function App() {
     };
   }, []);
 
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLElement>(null);
 
   const debouncedSource = useDebouncedValue(source, RENDER_DEBOUNCE_MS);
@@ -440,7 +446,7 @@ function App() {
     [debouncedSource],
   );
 
-  useSyncScroll(previewRef, blocks, source, cursorOffset, mode === "split");
+  useSyncScroll(editorRef, previewRef, blocks, mode === "split");
   const { ratio, dividerProps, onMouseMove, onMouseUp } = useSplitRatio(
     settings.splitRatio,
     setSplitRatio,
@@ -479,12 +485,7 @@ function App() {
         return;
       }
       if (mod || e.altKey || e.shiftKey) return;
-      if (
-        e.target instanceof HTMLElement &&
-        (e.target.isContentEditable || e.target.closest("[contenteditable='true']"))
-      ) {
-        return;
-      }
+      if (e.target instanceof HTMLTextAreaElement) return;
       const key = e.key.toLowerCase();
       if (key === "e") setMode("edit");
       else if (key === "v") setMode("view");
@@ -722,13 +723,17 @@ function App() {
             data-testid="editor-pane"
             style={{ flexBasis: `${ratio}%` }}
           >
-            <MarkdownEditor
+            <textarea
+              ref={editorRef}
+              className="editor-input"
+              data-testid="editor-input"
+              aria-label="Markdown editor"
               value={source}
-              onChange={(value) => {
-                setSource(value);
+              onChange={(event) => {
+                setSource(event.currentTarget.value);
                 setDirty(true);
               }}
-              onCursorChange={setCursorOffset}
+              spellCheck={false}
             />
           </section>
         )}

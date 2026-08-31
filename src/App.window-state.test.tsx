@@ -34,10 +34,21 @@ const windowMocks = vi.hoisted(() => {
   };
 });
 
+const dialogMocks = vi.hoisted(() => ({
+  confirm: vi.fn(),
+}));
+
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: windowMocks.getCurrentWindow,
   availableMonitors: windowMocks.availableMonitors,
 }));
+
+vi.mock(
+  "@tauri-apps/plugin-dialog",
+  () => ({
+    confirm: dialogMocks.confirm,
+  }),
+);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -72,8 +83,12 @@ async function waitForWindowListeners() {
 async function setEditorText(value: string) {
   const editor = screen.getByTestId("editor-input");
   await act(async () => {
-    editor.textContent = value;
-    fireEvent.input(editor, { inputType: "insertText", data: value });
+    if (editor instanceof HTMLTextAreaElement) {
+      fireEvent.change(editor, { target: { value } });
+    } else {
+      editor.textContent = value;
+      fireEvent.input(editor, { inputType: "insertText", data: value });
+    }
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -82,6 +97,7 @@ async function setEditorText(value: string) {
 describe("window state and native close guard", () => {
   beforeEach(() => {
     mockedInvoke.mockReset();
+    dialogMocks.confirm.mockReset();
     mockedInvoke.mockImplementation(async (command) => {
       if (command === "load_settings") {
         return {
@@ -274,9 +290,12 @@ describe("window state and native close guard", () => {
     );
   });
 
-  it("flushes pending native geometry before an accepted close resolves", async () => {
+  it("starts best-effort persistence with the latest geometry without delaying an accepted dirty close", async () => {
+    dialogMocks.confirm.mockResolvedValue(true);
+    const windowConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderApp();
     await waitForWindowListeners();
+    await setEditorText("unsaved");
     mockedInvoke.mockClear();
 
     const latestState = {
@@ -296,50 +315,50 @@ describe("window state and native close guard", () => {
     });
 
     let saveStarted = false;
-    let closeResolved = false;
     let resolveSave: () => void = () => {};
     const saveFinished = new Promise<void>((resolve) => {
       resolveSave = resolve;
     });
+
+    const closeEvent = { preventDefault: vi.fn() };
+    let notifySaveStarted: () => void = () => {};
+    const saveStartedPromise = new Promise<void>((resolve) => {
+      notifySaveStarted = resolve;
+    });
     mockedInvoke.mockImplementation(async (command) => {
       if (command === "save_settings") {
         saveStarted = true;
+        notifySaveStarted();
         await saveFinished;
       }
       return undefined;
     });
 
-    const closeEvent = { preventDefault: vi.fn() };
-    let closePromise: Promise<void> | undefined;
-    act(() => {
-      closePromise = Promise.resolve(windowMocks.closeHandler?.(closeEvent)).then(() => {
-        closeResolved = true;
-      });
-    });
+    const closePromise = windowMocks.closeHandler?.(closeEvent) ?? Promise.resolve();
+    await saveStartedPromise;
 
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    try {
+      const closeSettled = await Promise.race([
+        closePromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
 
-    expect(saveStarted).toBe(true);
-    expect(closeResolved).toBe(false);
-    expect(mockedInvoke).toHaveBeenCalledWith(
-      "save_settings",
-      expect.objectContaining({
-        settings: expect.objectContaining({ windowState: latestState }),
-      }),
-    );
-
-    resolveSave();
-    await act(async () => {
+      expect(saveStarted).toBe(true);
+      expect(closeSettled).toBe(true);
+      expect(dialogMocks.confirm).toHaveBeenCalledOnce();
+      expect(dialogMocks.confirm).toHaveBeenCalledWith("目前有未儲存的變更，確定要關閉視窗嗎？");
+      expect(windowConfirm).not.toHaveBeenCalled();
+      expect(closeEvent.preventDefault).not.toHaveBeenCalled();
+      expect(mockedInvoke).toHaveBeenCalledWith(
+        "save_settings",
+        expect.objectContaining({
+          settings: expect.objectContaining({ windowState: latestState }),
+        }),
+      );
+    } finally {
+      resolveSave();
       await closePromise;
-      await new Promise((resolve) => setTimeout(resolve, 260));
-    });
-
-    expect(closeResolved).toBe(true);
-    expect(closeEvent.preventDefault).not.toHaveBeenCalled();
-    expect(mockedInvoke.mock.calls.filter(([command]) => command === "save_settings")).toHaveLength(1);
+    }
   });
 
   it("does not wait for unresolved native geometry before an accepted close resolves", async () => {
@@ -411,7 +430,7 @@ describe("window state and native close guard", () => {
       closeResolved = true;
     });
     await Promise.resolve();
-    expect(closeResolved).toBe(false);
+    expect(closeResolved).toBe(true);
 
     resolveSave();
     let finishTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -441,7 +460,8 @@ describe("window state and native close guard", () => {
   });
 
   it("prevents a dirty native close when discard is declined", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
+    dialogMocks.confirm.mockResolvedValue(false);
+    const windowConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderApp();
     await waitForWindowListeners();
     await setEditorText("unsaved");
@@ -454,7 +474,9 @@ describe("window state and native close guard", () => {
       await windowMocks.closeHandler?.(event);
     });
 
-    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(dialogMocks.confirm).toHaveBeenCalledOnce();
+    expect(dialogMocks.confirm).toHaveBeenCalledWith("目前有未儲存的變更，確定要關閉視窗嗎？");
+    expect(windowConfirm).not.toHaveBeenCalled();
     expect(event.preventDefault).toHaveBeenCalledOnce();
     expect(mockedInvoke.mock.calls.filter(([command]) => command === "save_settings")).toHaveLength(0);
   });
@@ -470,12 +492,68 @@ describe("window state and native close guard", () => {
     expect(cleanEvent.preventDefault).not.toHaveBeenCalled();
 
     await setEditorText("unsaved");
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    dialogMocks.confirm.mockResolvedValue(true);
+    const windowConfirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const confirmedEvent = { preventDefault: vi.fn() };
     await act(async () => {
       await windowMocks.closeHandler?.(confirmedEvent);
     });
+    expect(dialogMocks.confirm).toHaveBeenCalledOnce();
+    expect(windowConfirm).not.toHaveBeenCalled();
     expect(confirmedEvent.preventDefault).not.toHaveBeenCalled();
+  });
+
+  it("does not delay a clean native close while settings persistence is unresolved", async () => {
+    let saveStarted = false;
+    let resolveSave: () => void = () => {};
+    const saveFinished = new Promise<void>((resolve) => {
+      resolveSave = resolve;
+    });
+    let notifySaveStarted: () => void = () => {};
+    const saveStartedPromise = new Promise<void>((resolve) => {
+      notifySaveStarted = resolve;
+    });
+    mockedInvoke.mockImplementation(async (command) => {
+      if (command === "load_settings") {
+        return {
+          windowState: {
+            width: 1280,
+            height: 720,
+            x: -12,
+            y: 34,
+            maximized: true,
+          },
+        };
+      }
+      if (command === "recent_files_list") return [];
+      if (command === "save_settings") {
+        saveStarted = true;
+        notifySaveStarted();
+        await saveFinished;
+      }
+      return undefined;
+    });
+
+    renderApp();
+    await waitForWindowListeners();
+
+    const closeEvent = { preventDefault: vi.fn() };
+    const closePromise = windowMocks.closeHandler?.(closeEvent) ?? Promise.resolve();
+    await saveStartedPromise;
+
+    try {
+      const closeSettled = await Promise.race([
+        closePromise.then(() => true),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
+
+      expect(saveStarted).toBe(true);
+      expect(closeSettled).toBe(true);
+      expect(closeEvent.preventDefault).not.toHaveBeenCalled();
+    } finally {
+      resolveSave();
+      await closePromise;
+    }
   });
 
   it("unlistens every native window listener on unmount", async () => {

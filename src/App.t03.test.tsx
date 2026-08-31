@@ -21,8 +21,12 @@ function renderApp() {
 
 async function setEditorText(editor: HTMLElement, value: string) {
   await act(async () => {
-    editor.textContent = value;
-    fireEvent.input(editor, { inputType: "insertText", data: value });
+    if (editor instanceof HTMLTextAreaElement) {
+      fireEvent.change(editor, { target: { value } });
+    } else {
+      editor.textContent = value;
+      fireEvent.input(editor, { inputType: "insertText", data: value });
+    }
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -82,7 +86,7 @@ describe("MarkdownDesk tri-mode split view (T03)", () => {
     expect(screen.getByTestId("preview-pane")).toBeTruthy();
   });
 
-  it("keeps plain-letter mode shortcuts out of the contenteditable editor", () => {
+  it("keeps plain-letter mode shortcuts out of the native textarea editor", () => {
     renderApp();
     const editor = screen.getByTestId("editor-input");
 

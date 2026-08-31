@@ -65,11 +65,24 @@ const mockedPrintPdf = vi.mocked(printPdf);
 
 async function setEditorText(editor: HTMLElement, value: string) {
   await act(async () => {
-    editor.textContent = value;
-    fireEvent.input(editor, { inputType: "insertText", data: value });
+    if (editor instanceof HTMLTextAreaElement) {
+      fireEvent.change(editor, { target: { value } });
+    } else {
+      editor.textContent = value;
+      fireEvent.input(editor, { inputType: "insertText", data: value });
+    }
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function editorText(editor: HTMLElement): string {
+  if (editor instanceof HTMLTextAreaElement) return editor.value;
+
+  const lines = Array.from(editor.querySelectorAll(".cm-line"));
+  return lines.length > 0
+    ? lines.map((line) => line.textContent ?? "").join("\n")
+    : editor.textContent ?? "";
 }
 
 describe("App integration seams (T09)", () => {
@@ -139,7 +152,7 @@ describe("App integration seams (T09)", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("editor-input").textContent).toBe("# Dropped");
+      expect(editorText(screen.getByTestId("editor-input"))).toBe("# Dropped");
     });
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/dropped.md" });
   });
@@ -160,7 +173,7 @@ describe("App integration seams (T09)", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("editor-input").textContent).toBe("# Native drop");
+      expect(editorText(screen.getByTestId("editor-input"))).toBe("# Native drop");
     });
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/native-drop.md" });
   });
@@ -179,9 +192,15 @@ describe("App integration seams (T09)", () => {
     eventMocks.openFileHandler?.({ payload: "/tmp/from-finder.md" });
 
     await waitFor(() => {
-      expect(screen.getByTestId("editor-input").textContent).toBe("# Finder");
+      const editor = screen.getByTestId("editor-input");
+      expect(editor).toBeInstanceOf(HTMLTextAreaElement);
+      expect((editor as HTMLTextAreaElement).value).toBe("# Finder");
+      expect(document.querySelector(".cm-editor")).toBeNull();
+      expect(document.querySelector(".cm-gutters")).toBeNull();
     });
-    expect(screen.getByTestId("preview-pane").querySelector("h1")?.textContent).toBe("Finder");
+    await waitFor(() => {
+      expect(screen.getByTestId("preview-pane").querySelector("h1")?.textContent).toBe("Finder");
+    });
     expect(screen.getByTestId("file-status").textContent).toBe("/tmp/from-finder.md");
     expect(mockedInvoke).toHaveBeenCalledWith("read_file", { path: "/tmp/from-finder.md" });
   });

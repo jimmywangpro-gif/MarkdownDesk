@@ -1,7 +1,7 @@
 # Hermes Agent Collaboration Protocol — MarkdownDesk
 
 > 專案專屬版（衍生自 ~/projects/AGENT-HERMES.md 母版，母版不受影響）。
-> 技術棧：Tauri v2 + Rust + TypeScript/React + CodeMirror 6。
+> 技術棧：Tauri v2 + Rust + TypeScript/React + 受控原生 textarea editor（CodeMirror 6 因 macOS packaged WebKit regression 已撤回）。
 > 執行者：Codex agent 與 pi agent 多平行派工（各自 git worktree）。
 
 ---

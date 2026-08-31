@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,37 @@ import {
 
 const configPath = new URL("../src-tauri/tauri.conf.json", import.meta.url);
 const repoRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
+const bundleRoot = path.join(repoRoot, "src-tauri", "target", "release", "bundle");
+
+async function snapshotFiles(directory) {
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
+
+  const files = [];
+  for (const entry of entries) {
+    const entryPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...await snapshotFiles(entryPath));
+    else if (entry.isFile()) files.push(path.relative(repoRoot, entryPath));
+  }
+  return files.sort();
+}
+
+function runMacReleaseDryRun(environment) {
+  return spawnSync(
+    process.execPath,
+    ["scripts/package.mjs", "--release", "--dry-run"],
+    { cwd: repoRoot, encoding: "utf8", env: environment },
+  );
+}
+
+function combinedOutput(result) {
+  return `${result.stdout}\n${result.stderr}`;
+}
 
 test("maps each supported host to only its native bundle formats", () => {
   assert.deepEqual(getPackagingPlan("darwin"), {
@@ -82,6 +113,39 @@ test("validates the Tauri target mapping from the checked-in config", async () =
   assert.doesNotThrow(() => validateTauriConfig(config));
 });
 
+test("keeps the checked-in Tauri identifier on the public packaging seam", async () => {
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  assert.equal(config.identifier, "io.github.jimmywangpro-gif.markdowndesk");
+});
+
+test("rejects a macOS release dry-run when signing and notarization settings are absent", { skip: process.platform !== "darwin" }, () => {
+  const environment = { ...process.env };
+  delete environment.APPLE_SIGNING_IDENTITY;
+  delete environment.MACOS_NOTARY_PROFILE;
+
+  const result = runMacReleaseDryRun(environment);
+
+  assert.notEqual(result.status, 0);
+  assert.match(combinedOutput(result), /APPLE_SIGNING_IDENTITY/);
+  assert.match(combinedOutput(result), /MACOS_NOTARY_PROFILE/);
+});
+
+test("reports an unverified macOS release dry-run with placeholder settings and creates no artifact", { skip: process.platform !== "darwin" }, async () => {
+  const environment = {
+    ...process.env,
+    APPLE_SIGNING_IDENTITY: "placeholder-signing-identity",
+    MACOS_NOTARY_PROFILE: "placeholder-notary-profile",
+  };
+  const before = await snapshotFiles(bundleRoot);
+
+  const result = runMacReleaseDryRun(environment);
+
+  const after = await snapshotFiles(bundleRoot);
+  assert.equal(result.status, 0);
+  assert.match(combinedOutput(result), /release dry-run is UNVERIFIED/);
+  assert.deepEqual(after, before);
+});
+
 test("accepts a measured manifest under the package size guard", () => {
   const result = validateSizeManifest({
     sizeLimitBytes: 15 * 1024 * 1024,
@@ -131,4 +195,17 @@ test("still fails an AppImage beyond the 100 MiB format budget", () => {
     status: "FAILED",
     oversized: ["MarkdownDesk.AppImage"],
   });
+});
+
+test("requires macOS release verification to assess the app executable after stapling", async () => {
+  const script = await readFile(path.join(repoRoot, "scripts", "package.mjs"), "utf8");
+  const functionBody = script.match(
+    /function verifyAndNotarizeMacRelease\(appPath, dmgPath\) \{([\s\S]*?)\n\}/,
+  )?.[1];
+
+  assert.ok(functionBody, "verifyAndNotarizeMacRelease must remain source-visible");
+  assert.match(
+    functionBody,
+    /runMacReleaseCommand\("xcrun", \["stapler", "staple", dmgPath\]\);[\s\S]*runMacReleaseCommand\("spctl", \[\s*"--assess",\s*"--type",\s*"execute",\s*"--verbose=4",\s*appPath,\s*\]\);/,
+  );
 });

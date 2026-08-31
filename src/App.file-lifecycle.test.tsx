@@ -56,11 +56,25 @@ function openedFile(path: string, content: string, mtime: number) {
 async function setEditorText(value: string) {
   const editor = screen.getByTestId("editor-input");
   await act(async () => {
-    editor.textContent = value;
-    fireEvent.input(editor, { inputType: "insertText", data: value });
+    if (editor instanceof HTMLTextAreaElement) {
+      fireEvent.change(editor, { target: { value } });
+    } else {
+      editor.textContent = value;
+      fireEvent.input(editor, { inputType: "insertText", data: value });
+    }
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function editorText(): string {
+  const editor = screen.getByTestId("editor-input");
+  if (editor instanceof HTMLTextAreaElement) return editor.value;
+
+  const lines = Array.from(editor.querySelectorAll(".cm-line"));
+  return lines.length > 0
+    ? lines.map((line) => line.textContent ?? "").join("\n")
+    : editor.textContent ?? "";
 }
 
 describe("App file lifecycle remediation", () => {
@@ -122,10 +136,10 @@ describe("App file lifecycle remediation", () => {
     await waitFor(() => expect(fileOpsMocks.fileOpenedHandler).toBeTypeOf("function"));
 
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/a.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# A"));
+    await waitFor(() => expect(editorText()).toBe("# A"));
 
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/b.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# B"));
+    await waitFor(() => expect(editorText()).toBe("# B"));
 
     expect(fileOpsMocks.watchFile).toHaveBeenNthCalledWith(1, "/tmp/a.md");
     expect(fileOpsMocks.watchFile).toHaveBeenNthCalledWith(2, "/tmp/b.md");
@@ -164,7 +178,7 @@ describe("App file lifecycle remediation", () => {
     fileOpsMocks.saveFile.mockRejectedValue(new Error("external version conflict"));
     render(<App />);
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await waitFor(() => expect(editorText()).toBe("# Live"));
     await setEditorText("edited before conflict");
     await waitFor(() =>
       expect(screen.getByTestId("preview-pane").textContent).toContain("edited before conflict"),
@@ -188,7 +202,7 @@ describe("App file lifecycle remediation", () => {
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
     render(<App />);
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await waitFor(() => expect(editorText()).toBe("# Live"));
     await setEditorText("edited before external failure");
     await waitFor(() =>
       expect(screen.getByTestId("preview-pane").textContent).toContain("edited before external failure"),
@@ -207,7 +221,7 @@ describe("App file lifecycle remediation", () => {
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
     render(<App />);
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await waitFor(() => expect(editorText()).toBe("# Live"));
 
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# External", 11));
     await act(async () => {
@@ -236,7 +250,7 @@ describe("App file lifecycle remediation", () => {
       .mockResolvedValueOnce(openedFile("/tmp/live.md", "# Latest external", 12));
     render(<App />);
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await waitFor(() => expect(editorText()).toBe("# Live"));
 
     await act(async () => {
       fileOpsMocks.fileChangedHandler?.("/tmp/live.md");
@@ -250,9 +264,7 @@ describe("App file lifecycle remediation", () => {
       await firstExternalRead;
     });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("editor-input").textContent).toBe("# Latest external"),
-    );
+    await waitFor(() => expect(editorText()).toBe("# Latest external"));
     expect(fileOpsMocks.readFile).toHaveBeenCalledTimes(3);
 
     fireEvent.click(screen.getByTestId("save-button"));
@@ -269,7 +281,7 @@ describe("App file lifecycle remediation", () => {
     fileOpsMocks.readFile.mockResolvedValue(openedFile("/tmp/live.md", "# Live", 10));
     const view = render(<App />);
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await waitFor(() => expect(editorText()).toBe("# Live"));
 
     view.unmount();
 
@@ -282,7 +294,7 @@ describe("App file lifecycle remediation", () => {
     fileOpsMocks.saveFile.mockResolvedValue({ path: "/tmp/live.md", mtime: 20 });
     render(<App />);
     await act(async () => fileOpsMocks.fileOpenedHandler?.("/tmp/live.md"));
-    await waitFor(() => expect(screen.getByTestId("editor-input").textContent).toBe("# Live"));
+    await waitFor(() => expect(editorText()).toBe("# Live"));
     await setEditorText("edited");
 
     fireEvent.click(screen.getByTestId("save-button"));

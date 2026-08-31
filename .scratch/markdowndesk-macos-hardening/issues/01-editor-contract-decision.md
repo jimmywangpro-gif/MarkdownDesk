@@ -6,10 +6,10 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** completed — 使用者已決定採用 CodeMirror 6；migration 已合併 main 並通過 L5。
+**Status:** completed — 初次決策採用 CodeMirror 6，但 packaged macOS WebKit 實測出現「preview 已載入、editor 空白且顯示 gutter」regression。使用者於 2026-08-30 依穩定性優先原則改裁示 v1 採受控原生 textarea；CodeMirror dependency、implementation 與專屬 tests 已撤回。
 
-- [ ] 明確記錄 editor 選擇與理由
-- [ ] SPEC 與實際 dependency / editor implementation 一致
-- [ ] 若維持 textarea，確認目前 editor 行為足以支援 v1，並記錄限制
-- [ ] 若 CodeMirror 6 仍是必要條件，另建立獨立實作票，不把 migration 混入 workspace layout 修復
-- [ ] 決策完成後，後續 workspace ticket 使用同一份 editor 契約
+- [x] 明確記錄 editor 選擇與理由
+- [x] SPEC 與實際 dependency / editor implementation 一致
+- [x] 維持 textarea；native file-open contract 與 textarea `.value` / preview 同步已有 regression tests
+- [x] CodeMirror 如未來重新評估，必須獨立處理 macOS WebKit runtime verification，不得混入 workspace layout 修復
+- [x] 後續 workspace ticket 使用 textarea editor 契約

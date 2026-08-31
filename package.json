@@ -12,14 +12,14 @@
     "lint": "eslint --max-warnings 0 \"src/**/*.{ts,tsx}\" \"src-tauri/**/*.ts\" \"scripts/*.{js,mjs}\" vite.config.ts eslint.config.js",
     "tauri": "tauri",
     "package": "node scripts/package.mjs",
+    "package:macos:release": "node scripts/package.mjs --release",
     "packaging:validate": "node scripts/validate-packaging.mjs",
     "packaging:test": "node --test scripts/packaging-contract.node.mjs"
   },
   "dependencies": {
-    "@codemirror/lang-markdown": "^6.5.2",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
     "@tauri-apps/plugin-opener": "^2",
-    "codemirror": "^6.0.2",
     "highlight.js": "^11.12.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

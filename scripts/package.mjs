@@ -58,15 +58,32 @@ async function collectArtifacts(plan, buildStartedAt) {
   return artifacts;
 }
 
-function runTauriBuild(plan) {
+function validateMacReleaseEnvironment(release) {
+  if (!release) return;
+  if (process.platform !== "darwin") {
+    throw new Error("--release is supported only on Darwin");
+  }
+
+  const missing = [];
+  if (!process.env.APPLE_SIGNING_IDENTITY?.trim()) missing.push("APPLE_SIGNING_IDENTITY");
+  if (!process.env.MACOS_NOTARY_PROFILE?.trim()) missing.push("MACOS_NOTARY_PROFILE");
+  if (missing.length > 0) {
+    throw new Error(`macOS release requires nonempty: ${missing.join(", ")}`);
+  }
+}
+
+function runTauriBuild(plan, release) {
   // Node >= 20.12 (CVE-2024-27980) refuses to spawn .cmd/.bat files without
   // an explicit shell; use shell:true on Windows to launch npm.cmd safely.
   const useShell = process.platform === "win32";
   const npmCommand = useShell ? "npm.cmd" : "npm";
+  const tauriArgs = ["run", "tauri", "--", "build", "--ci"];
+  if (!release) tauriArgs.push("--no-sign");
+  tauriArgs.push("--bundles", ...plan.bundles);
   console.log(`Running native Tauri bundles: ${plan.bundles.join(", ")}`);
   const result = spawnSync(
     npmCommand,
-    ["run", "tauri", "--", "build", "--ci", "--no-sign", "--bundles", ...plan.bundles],
+    tauriArgs,
     { cwd: repoRoot, stdio: "inherit", shell: useShell },
   );
   if (result.error) throw result.error;
@@ -106,27 +123,81 @@ async function createMacDmgFallback(config, buildStartedAt) {
   }
 }
 
+function runMacReleaseCommand(command, args) {
+  const result = spawnSync(command, args, { cwd: repoRoot, stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(`${command} release verification exited with ${result.status ?? "a signal"}`);
+  }
+}
+
+function verifyAndNotarizeMacRelease(appPath, dmgPath) {
+  console.log(`Verifying signed macOS app: ${appPath}`);
+  runMacReleaseCommand("codesign", ["--verify", "--deep", "--strict", "--verbose=2", appPath]);
+  console.log(`Submitting macOS DMG for notarization: ${dmgPath}`);
+  runMacReleaseCommand("xcrun", [
+    "notarytool",
+    "submit",
+    dmgPath,
+    "--keychain-profile",
+    process.env.MACOS_NOTARY_PROFILE,
+    "--wait",
+  ]);
+  runMacReleaseCommand("xcrun", ["stapler", "staple", dmgPath]);
+  runMacReleaseCommand("spctl", [
+    "--assess",
+    "--type",
+    "execute",
+    "--verbose=4",
+    appPath,
+  ]);
+  runMacReleaseCommand("xcrun", ["stapler", "validate", dmgPath]);
+  runMacReleaseCommand("spctl", [
+    "--assess",
+    "--type",
+    "open",
+    "--context",
+    "context:primary-signature",
+    "--verbose=4",
+    dmgPath,
+  ]);
+}
+
 async function main() {
+  const release = process.argv.includes("--release");
+  validateMacReleaseEnvironment(release);
+
   const config = JSON.parse(await readFile(configPath, "utf8"));
   validateTauriConfig(config);
   const plan = getPackagingPlan();
 
   if (process.argv.includes("--dry-run")) {
-    console.log(`UNVERIFIED: dry run only; no ${plan.bundles.join(", ")} artifact was created.`);
+    if (release) {
+      console.log("UNVERIFIED: release dry-run is UNVERIFIED; no dmg artifact was created.");
+    } else {
+      console.log(`UNVERIFIED: dry run only; no ${plan.bundles.join(", ")} artifact was created.`);
+    }
     return;
   }
 
   console.log(`Packaging host: ${process.platform}/${process.arch}`);
   console.log(`Packaging plan: ${plan.platform} -> ${plan.bundles.join(", ")}`);
   const buildStartedAt = Date.now();
-  const tauriBuildSucceeded = runTauriBuild(plan);
+  const tauriBuildSucceeded = runTauriBuild(plan, release);
   if (!tauriBuildSucceeded) await createMacDmgFallback(config, buildStartedAt);
 
-  const artifacts = await collectArtifacts(plan, buildStartedAt);
+  let artifacts = await collectArtifacts(plan, buildStartedAt);
   if (artifacts.length !== plan.bundles.length) {
     const found = new Set(artifacts.map((artifact) => artifact.format));
     const missing = plan.bundles.filter((format) => !found.has(format));
     throw new Error(`Tauri build completed without expected artifact(s): ${missing.join(", ")}`);
+  }
+
+  if (release) {
+    const dmgPath = path.join(repoRoot, artifacts[0].path);
+    const appPath = path.join(bundleRoot, "macos", `${config.productName}.app`);
+    verifyAndNotarizeMacRelease(appPath, dmgPath);
+    artifacts = await collectArtifacts(plan, buildStartedAt);
   }
 
   const manifest = {

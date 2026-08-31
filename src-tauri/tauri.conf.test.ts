@@ -41,6 +41,7 @@ const WINDOW_STATE_PERMISSIONS = [
   "core:window:allow-is-maximized",
   "core:window:allow-maximize",
   "core:window:allow-unmaximize",
+  "core:window:allow-destroy",
 ] as const;
 
 function cspDirectives(): Record<string, string> {

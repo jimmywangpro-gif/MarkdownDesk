@@ -40,7 +40,7 @@ MarkdownDesk：以 Tauri v2 打包的桌面應用。編輯與預覽分屏並排�
 
 ## Implementation Decisions
 
-- 技術棧（已裁示）：**Tauri v2 + Rust 後端 + TypeScript/React 前端 + CodeMirror 6**。
+- 技術棧（已裁示）：**Tauri v2 + Rust 後端 + TypeScript/React 前端 + 受控原生 textarea editor**。CodeMirror 6 曾完成 migration，但 packaged macOS WebKit 出現 editor 空白 regression；v1 自用穩定性優先，已撤回該依賴與 implementation。
 - 渲染管線：前端 TypeScript 純函式 `renderMarkdown(source: string): string`（unified 生態：remark-parse + remark-gfm + rehype-highlight + sanitize），回傳 HTML 字串交由預覽窗格注入。**這是全案最高、也是首選測試接縫。**
 - Rust 端職責僅限必須原生之處：檔案對話框（open/save）、最近檔案、外部檔案監看（notify crate）、匯出輔助；以 Tauri command 暴露，構成第二接縫（IPC boundary）。
 - PDF 匯出走 webview 原生列印（列印至 PDF），不引入 headless Chromium，守住體積目標。
